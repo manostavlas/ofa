@@ -1,0 +1,7 @@
+  #
+  # De-activate splash screen as there already is the database listing
+  #
+    OFA_SPLASH=0
+
+    return 0
+

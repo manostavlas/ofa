@@ -1,0 +1,8 @@
+var prompt=function() {
+var dbname=db.getName();
+var master=db.isMaster().ismaster;
+var dblabel=master?dbname:"("+dbname+")"
+var time=ISODate().toLocaleTimeString();
+var user = db.runCommand({connectionStatus : 1}).authInfo.authenticatedUsers[0];
+return time+" "+dbname+"> ";
+}

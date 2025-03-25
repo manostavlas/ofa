@@ -1,0 +1,273 @@
+function MongoLogin {
+  #
+  ## Name: MongoLogin
+  ## In:  database name
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Login to the database 
+  ##
+  ## Usage: ConnInfo
+  ##
+  ## Description:
+  ##
+  ##   Show connection info, host, port.
+  ##
+  #
+
+DatabaseName=$1
+if [[ -z $DatabaseName ]]
+then
+	echo
+	LogError "Database name missing...."
+	echo
+	return 1
+fi
+
+RunMmDp
+mongo $DatabaseName --username $InIts -p $MmDp --authenticationDatabase admin --host $(ConnInfoHost) --port $(ConnInfoPort)
+ErrorCode=$?
+if [[ $ErrorCode -ne 0 ]]
+then
+	LogError "Can't login to Host:$(ConnInfoHost), Port: $(ConnInfoPort)"
+	return 1
+fi 
+
+}
+
+function ConnInfo {
+  #
+  ## Name: ConnInfo
+  ##
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Read conf file 
+  ##
+  ## Usage: ConnInfo
+  ##
+  ## Description:
+  ##
+  ##   Show connection info, host, port.
+  ##
+  #
+MongoConfFile >/dev/null
+ConnPort=$(grep "port:" $MongoConfFile)
+echo "$ConnPort"
+ConnHost=$(grep "bindIp:" $MongoConfFile | awk -F "#" {'print $1'} | sed 's/ //g')
+
+if [[ bindIp:0.0.0.0 == $ConnHost ]]
+then
+        ConnHost="  bindIp: 0.0.0.0 (127.0.0.1)"
+fi
+
+echo "$ConnHost"
+}
+
+function ConnInfoPort {
+  #
+  ## Name: ConnInfo
+  ##
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Read conf file
+  ##
+  ## Usage: ConnInfo
+  ##
+  ## Description:
+  ##
+  ##   Show connection port.
+  ##
+  #
+MongoConfFile >/dev/null
+ConnPort=$(grep "port:" $MongoConfFile | awk -F ":" '{print $2}')
+echo "$ConnPort"
+}
+
+function ConnInfoHost {
+  #
+  ## Name: ConnInfoHost
+  ##
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Read conf file
+  ##
+  ## Usage: ConnInfoHost
+  ##
+  ## Description:
+  ##
+  ##   Show connection host.
+  ##
+  #
+MongoConfFile >/dev/null
+ConnHost=$(grep "bindIp:" $MongoConfFile | awk -F "#" {'print $1'} | awk -F ":" '{print $2}' | sed 's/ //g')
+if [[ 0.0.0.0 == $ConnHost ]]
+then
+	ConnHost=127.0.0.1
+fi 
+echo "$ConnHost"
+}
+
+function DbList {
+  #
+  ## Name: DbList
+  ##
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: queries listDatabases 
+  ##
+  ## Usage: DbList 
+  ##
+  ## Description:
+  ##
+  ##   Queries the listDatabases. 
+  ##
+  #
+    
+IsMongoRunning=$(ps -ef | pgrep mongod)
+
+if [[ -z $IsMongoRunning ]]
+then
+	return 1
+fi
+
+
+TmpLogFile=$OFA_LOG/tmp/DbList.tmp.$$.$PPID.log
+    RunMmDp
+#     mongo --username $InIts -p $MmDp --authenticationDatabase admin --host $(ConnInfoHost) --port $(ConnInfoPort) << __EOF | grep name | awk -F ":" '{print $2}' | sed 's/,//g'
+#     db.adminCommand( { listDatabases: 1 } )
+# __EOF
+
+    mongo --username $InIts -p $MmDp --authenticationDatabase admin --host $(ConnInfoHost) --port $(ConnInfoPort) << __EOF > $TmpLogFile 2>&1
+    db.adminCommand( { listDatabases: 1 } )
+__EOF
+
+ErrorInfo=$(grep "exception" $TmpLogFile)
+if [[ ! -z $ErrorInfo ]]
+then
+	LogError "Error getting DB list from  Host:$(ConnInfoHost), Port: $(ConnInfoPort)"
+	LogError "Log file: $TmpLogFile"
+# 	return 1
+else
+	cat $TmpLogFile | grep name | awk -F ":" '{print $2}' | sed 's/,//g'
+fi
+}
+
+function ShowMonDbs {
+  #
+  ## Name: ShowMonDbs
+  ##
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: List db's and status 
+  ##
+  ## Usage: ShowMonDbs
+  ##
+  ## Description:
+  ##
+  ##   List db's, status, conf file.
+  ##
+  #
+
+MongoProc=$(ps -ef | grep mongod | grep -v grep | awk '{print $8}' | awk -F "/" '{print $NF}')
+if [[ -z $MongoProc ]]
+then
+	MongoProc="n.a"
+fi
+
+printf "\n%-25s %-15s %-35s\n" "Database Name" "Status" "Config file"
+printf "%-25s %-15s %-35s\n" "-------------------------" "---------------" "------------------------------------"
+
+ConfFile=$(MongoConfFile)
+DatabaseList=$(DbList | sort | sed 's/"//g' )
+
+
+ if [[ -z $DatabaseList ]]
+ then
+ 	return 1
+ fi
+
+
+
+for i in $DatabaseList
+do
+	if [[ $i == admin ]]
+	then
+        	printf "\n%-25s %-15s %-35s %-s" "$i" "$MongoProc" "$ConfFile"
+	else
+        	printf "\n%-25s %-15s %-s" "$i"
+        fi
+done
+echo
+echo
+}
+
+function MongoConfFile {
+  #
+  ## Name: MongoConfFile
+  ## In: None 
+  ## Out: String to stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Gets conf file name. 
+  ##
+  ## Usage: MongoConfFile 
+  ##
+  ## Description:
+  ##
+  ##   Get the mongodb process with file name. 
+  ##
+  #
+
+MongoConfFile=$(ps -ef | grep mongod | grep -v grep | awk -F "-f" '{print $2}')
+if [[ -z $MongoConfFile ]]
+then
+        #"ERROR: Can't find mongodb conf file........"
+        MongoConfFile=${MONGO_CONF_FILE}
+	echo $MongoConfFile
+	return 1
+else
+	echo $MongoConfFile
+fi 
+}
+
+function HostType {
+  #
+  ##
+  ## Name: HostType
+  ##
+  ## Synopsis: Check if PRD or EVX server.
+  ##           hostname or SID's contain prd or PRD
+  ##
+  ## Output: EVX or PRD
+  ##
+  ## Usage: HostType
+  ##
+  #
+  ListDB=$(DbList 2>&1)
+  HostName=$(hostname)
+  DbHostList="${ListDB} ${HostName}"
+  PrdOrEvx=$(echo ${DbHostList} | grep -i PRD)
+        if [[ ! -z $PrdOrEvx ]]
+        then
+                echo  "PRD"
+        else
+                echo  "EVX"
+        fi
+}
+
+function RunMmDp {
+export MmDp="DkMdFrGr1207$"
+export InIts=admin
+}
+
+function UnRunMmDp {
+unset MmDp
+unset InIts
+}
+
+

@@ -1,0 +1,6 @@
+    if IsInterActiveCLI
+    then
+        ShowMonDbs
+    fi
+    return 0
+

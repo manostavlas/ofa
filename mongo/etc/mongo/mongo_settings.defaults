@@ -1,0 +1,35 @@
+  # -----------------------------
+  # ofa/mongo
+  # -----------------------------
+    export OFA_MONGO_BASE="/mongodb/product"
+    export MONGODB_HOME=$OFA_MONGO_BASE/bin
+    export OFA_DB_DATA=${OFA_DB_DATA:-"/DB/db"}
+    export OFA_DB_BKP=${OFA_DB_BKP:-"/backup"}
+    export OFA_DB_VAR=${OFA_DB_VAR:-"/dbvar"}
+    export OFA_DB_APPLI_TMP=/appli/tmpDBA
+    export OFA_GRID_DB=GRDPRD01
+    export OFA_GRID_DB_1=GRDEVX
+    export OFA_GRID_DB_2=GRDPRDOC
+    export OFA_GRID_SEC_DB=GRDPRDS
+    export MONGO_INSTANCE=FCSEV3
+    export MONGO_CONF_FILE="/mongodb/admin/${MONGO_INSTANCE}/etc/${MONGO_INSTANCE}.conf"
+  # -----------------------------
+
+# Set UNIX prompt
+if [[ "$(HostType)" == "PRD" ]]
+then
+        # Set Foreground
+        printf '\e[38;5;196m'
+        export PS1='\e[38;5;196m\u@\H: $(echo $PWD |sed "s@..*\(/[^/][^/]*/[^/][^/]*\)@- \1@") $ '
+else
+        # Set background
+        printf '\e[38;5;070m'
+        # Set background
+        export PS1='\e[38;5;070m\u@\H: $(echo $PWD |sed "s@..*\(/[^/][^/]*/[^/][^/]*\)@- \1@") $ '
+fi
+
+# Set Mongo prompt
+cp $OFA_ETC/mongo/mongo_settings.mongorc ~/.mongorc.js
+
+export PATH=$OFA_MONGO_BASE/bin:$PATH
+return 0
