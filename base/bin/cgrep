@@ -1,0 +1,46 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------------------
+# Copyright 2012-2013-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+# -----------------------------------------------------------------------------------------
+#
+# cgrep: like grep, with n preceding lines
+#        
+# usage: cgrep <pattern> <n> <file[s]>
+#
+# Author: Olaf AHLERS, 2006
+# ------------------------------------------------------------------------------
+
+if [[ $# -lt 3 ]];then
+   echo "
+   Usage: $(basename $0) <pattern> <n> <file[s]>
+   
+       n = lignes précédant match à afficher
+   "
+   exit -1
+fi
+
+p=$1
+s=$2
+
+shift 2
+
+for f in $@;do
+   echo "
+   =============================
+   == $f
+   =============================
+   "
+   lasti=-1
+   for i in $(grep -n "$p" $f|cut -d":" -f1)
+   do
+       let b=$i-$s
+       [[ $lasti -gt 0 ]] && [[ $b -le $lasti ]] && let b=$lasti+1
+    
+       echo  "# # # ======================"
+       echo  "# # # lines $b to $i"
+       echo  "# # # ======================"
+    
+       sed -n "$b,${i}p" $f
+       lasti=$i
+   done
+done

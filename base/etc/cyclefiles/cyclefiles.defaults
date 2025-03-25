@@ -1,0 +1,15 @@
+#
+## FILE_ACTN :
+## ===========
+## Default is "List" (no action)
+## Override with unit available in CycleFile
+#
+   FILE_ACTN="List"       # default action 
+   LEGAL_FILE_ACTN="^List$|^WeekDayName$|^WeekDayNum$|^WeekNum$|^MonthName$|^MonthNum$|^MonthDay$|^YyMmDd$|^Remove$|^Clobber$"
+   DAYS_BACK=15           # minimum file age
+   OFA_PRGE_DAYS_BACK=$DAYS_BACK
+   PRGE_PATH="$OFA_LOG"   # default purge path
+   PATH_SIGT="/log|/diag|/dbvar" # must match in file path (for safety)
+   OFA_PRGE_PATH_SIGT=$PATH_SIGT 
+   FILE_EXPR="*.log"      # simpe expr for use with find
+   FORCE="Y"              # rename files regardless of ctime (otherwise checked for safe delay)

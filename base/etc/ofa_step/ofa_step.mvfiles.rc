@@ -1,0 +1,27 @@
+  #
+  ##
+  ##  Set environment for Steplist:
+  ##    All settings take effect before execution starts
+  ##    and are guaranteed identical at the beginning of each step.
+  ##
+  #
+
+  #
+  ##  arg1 is the steplist file
+  ##  arg2 is SOURCEDIR         (Local directory)
+  ##  arg3 is TAG               (Backup TAG     )
+  ##  arg4 is OVERWRITE         (Overwrite existing files or not)
+  ##  arg5 is PATH_BKP_DEST     (Destination directory)
+  #
+    export SOURCEDIR=$2
+    export TAG=$3
+    export OVERWRITE=$4
+    export DESTDIR=$5/$3
+
+    CheckVar              \
+        SOURCEDIR         \
+        TAG               \
+        OVERWRITE         \
+        DESTDIR           \
+    || BailOut "missings args"
+

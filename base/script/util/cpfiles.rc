@@ -1,0 +1,23 @@
+#
+# StepList for Refresh environment.
+# -------------------------------------------------------------------------
+# Each non-comment line is eval'd
+# acceptable comments are #, REM and --.
+# Invoke ofa_step.sh with the name of this file.
+# -------------------------------------------------------------------------
+
+--Check if local path exists
+[[ ! -d $SOURCEDIR ]] && BailOut "Source directory $SOURCEDIR does not exist!"
+
+--If destination path does not exist, create it
+[[ ! -d $DESTDIR ]] && [[ $OVERWRITE == 'Y' ]] && mkdir -p $DESTDIR
+
+--If destination path exist and no OVERWRITE, exit
+[[ -d $DESTDIR ]] && [[ $OVERWRITE == 'N' ]] && BailOut "Destination directory $DESTDIR already exist (OVERWRITE='N')!"
+
+--Remove files if OVERWRITE='Y'
+[[ -d $DESTDIR ]] && [[ $OVERWRITE == 'Y' ]] && rm -rf $DESTDIR/*
+
+--Move files to destination directory
+cp -rp $SOURCEDIR $DESTDIR/ || BailOut "scp failed!"
+

@@ -1,0 +1,189 @@
+#!/usr/bin/env perl
+# -----------------------------------------------------------------------------------------
+# Copyright 2012-2013-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+# -----------------------------------------------------------------------------------------
+#
+# file: crep
+#
+# synopsis: context grep - display surrounding lines of the match 
+#
+# Usage: 
+#    crep [options] <pattern> <file>
+#
+# Options: 
+#    -h <integer|pattern>   # h for "head":  integer or pattern. Default: 2
+#    -t <integer|pattern>   # t for "trail": integer or pattern. Default: 2
+#
+# Author: Olaf AHLERS, 2006
+# Modifications:
+#    20120315 - OLS: posé ce script
+# ------------------------------------------------------------------------------
+
+use warnings;
+use strict;
+use File::Basename;
+use Getopt::Long;
+
+#
+# vars
+#
+my $prog =  basename($0);
+my $trail = 0;
+my %opts;
+my ($b4, $b5, $dt, $pre, $sign, $cur);
+
+#
+# Syntax
+#
+$#ARGV > 0 or usage();
+
+#
+# opts
+#
+GetOptions(\%opts
+            ,'h=s'
+            ,'t=s'
+            ,'d=s'
+            ,'collapse'
+          ) or die "$!(use $prog -h pour écran \"usage\")\n\n";
+$b4 = $opts{h} || 0;
+$b5 = $opts{t} || 0;
+$dt = $opts{d} || undef;
+$sign = "|";
+$pre  = "";
+$cur  = 0;
+
+#
+# args
+#
+my ($pat, $file) = (shift, shift);
+
+open (IN, "<$file") or die "couldn't open file: $file";
+
+   my $ars = $b4 + 1;  # array size for current window
+   my @ar;
+
+   foreach (<IN>) {
+      ++$cur;
+      if ($trail > 0) { 
+         if ($opts{collapse}) {
+            if ($pre || (not $opts{d})) { 
+                if ($pre) {
+                    print "$sign",  $pre, $sign, " $cur", ": ", $_;
+                } else {
+                    print "$sign", $_;
+                }
+            } 
+         } else {
+             print "$sign", " $cur", ": ", $_;
+         }
+         $trail--;
+      } else { 
+          # only push on stack if not printed yet.
+          # This avoids repeating "overlapping" lines
+          push @ar, "$sign" . " $cur" . ": " . $_;
+      }
+      length(($#ar) > $ars -1) and shift @ar;
+      if ( $opts{d} && /$dt/) { 
+         chomp;
+         $pre = $_; 
+      }
+      if (/$pat/ && ($pre || (not $opts{d})) ) { 
+         $trail = $b5;
+         if ($opts{collapse}) {
+             foreach ( @ar ) {
+                 chomp;
+                 if ($pre) {
+                     print "$sign", $pre, $_, "\n";
+                 } else {
+                     print $_, "\n";
+                 }
+             }
+         } else {
+             if ($pre) {
+                 sep();
+                 print "$sign", $pre, "\n";
+                 print @ar; 
+             } else {
+                 sep();
+                 print @ar; 
+             }
+         }
+      } 
+   }
+
+sub sep{
+   print "
+   == in $file ======================
+   \n";
+}
+
+sub usage {
+   print STDOUT <<"EOF"
+
+    Usage: basename($0) [-<opts>] <pat> <file>
+
+    Options
+    =======
+     -h <integer>   # nombre de lignes précédentes
+     -t <integer>   # nombre de lignes après
+     -d <pattern>   # preceding pattern (typiquement une date)
+     -collapse      # Affichage plus ramassé. La date précède chaque ligne.
+    
+EOF
+;
+   exit -1;
+}
+
+## Not Reached.
+
+__END__
+=head1 NAME
+
+   crepe
+
+=head2 Purpose
+
+   "grep" avec contexte
+
+=head2 SYNOPSIS
+
+   crepe [-<opts>] <pat> <file>
+
+=head2 Exemples: 
+
+=head3 avec -d et -collapse
+
+$ crepe -d "^\w\w\w Feb .." --collapse  "advanced to log sequence" alert_DBAP.log 
+=pre
+
+|Thu Feb 03 21:00:08 2011| 2: Thread 1 advanced to log sequence 3849 (LGWR switch)
+|Fri Feb 04 00:25:18 2011| 14: Thread 1 advanced to log sequence 3850 (LGWR switch)
+|Fri Feb 04 04:42:30 2011| 25: Thread 1 advanced to log sequence 3851 (LGWR switch)
+...
+   
+=head3 avec -d mais SANS  -collapse
+
+  crepe -d "^\w\w\w Feb .." "advanced to log sequence" alert_DBAP.log  | head -20 
+
+=head3 avec -d et -collapse plus -t ("trailing lines")
+
+  crepe -d "^\w\w\w Feb .." -collapse -t 3  "advanced to log sequence" alert_DBAP.log  | head -20
+
+=head3 avec -d et -collapse plus -t ("trailing lines")
+
+  crepe -d "^\w\w\w Feb .." -collapse -h 3  "advanced to log sequence" alert_DBAP.log  | head -20
+
+=head3 avec -d SANS -collapse plus -t ("trailing lines")
+
+  crepe -d "^\w\w\w Feb .." -h 3  "advanced to log sequence" alert_DBAP.log  | head -20
+
+=head1 AUTHOR
+
+Foundation: Michael PEPPLER, until 2007
+Maintenance: Olaf AHLERS, Sept, 2010
+Documentation: Olaf AHLERS, Sept, 2010
+
+=cut
+
+

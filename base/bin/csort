@@ -1,0 +1,125 @@
+#!/bin/env perl
+# -----------------------------------------------------------------------------------------
+# Copyright 2012-2013-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+# -----------------------------------------------------------------------------------------
+#
+# csort (count sort)
+#
+# Lire pod en fin de fichier ou faire csort -h
+#
+# Author: Olaf AHLERS, 2006
+# Modifications:
+#    20120315 - OLS: posé ce script
+# ------------------------------------------------------------------------------
+
+use strict;
+use warnings;
+use IO::File;
+use Getopt::Long;
+use Data::Dumper;
+
+my %h;
+my $fh;
+my $total = 0;
+my $prog = $0;
+
+my %opts;
+GetOptions(\%opts
+            ,'p=s'
+            ,'t|total'
+            ,'h|help'
+);
+
+# # # if ( $opts{h} || $opts{help} || $opts{"?"}) {
+if ( $opts{h} || $opts{help}) {
+   system ("perldoc $prog");
+   exit;
+}
+
+if ( $#ARGV  >= 0) {
+   foreach my $file (@ARGV) {
+       $fh = IO::File->new("< $file") or die "Dog! - open $file: $!";
+       f_stackup();
+       $fh->close;
+   }
+} else {
+   $fh = *STDIN;
+   f_stackup();
+}
+
+foreach (sort keys %h) {
+    print $h{$_}, "\t", $_, "\n";
+}
+
+if ($opts{t} || $opts{total}) {
+   print "\n", $total, "\tmatches in total\n";
+}
+
+
+# ----------------------------------------------
+# functions
+# ----------------------------------------------
+
+sub f_stackup {
+    foreach (<$fh>) {
+        chomp;
+        if (defined $opts{p}) {
+            /$opts{p}/ or next;
+        }
+        ++$total;
+        ++$h{$_};
+    }
+}
+
+## Not Reached.
+
+__END__
+=head1 NAME
+
+   csort 
+   
+=head1 SYNOPSIS
+   
+
+- Print a unique sort with number of occurrences.
+
+=head2 SYNTAX
+
+   csort [options] [file [file [...]]]
+
+   Note: if no files are passed, STDIN will be used. 
+
+   Examples: 
+
+      # extract OFA_-03110 with count
+
+          csort -p OFA_-03110 alert.log alert.log.old  
+
+      # sort your phone list and show duplicates
+
+          cat phoneliet.txt | csort                   
+
+      # read your keyboard input until Ctrl-D is pressed, 
+      # After Ctrl-D, a unique sort with counts of all lines where you typed 
+      # "toto" is printed (same as with file or piped input). 
+
+          csort -p toto                               
+
+=head2 OPTIONS
+
+   -h|help|? 
+      print this documentation
+
+   -p <pattern> 
+      discards all lines not matching this pattern. 
+
+   -t 
+      display sum total of matches at the bottom of the report
+
+
+=head1 AUTHOR
+
+   Olaf AHLERS, Oct 2011
+
+=cut
+

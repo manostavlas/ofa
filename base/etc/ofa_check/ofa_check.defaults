@@ -1,0 +1,19 @@
+  #
+  ## Variables shown with triple undercore are being assigned the expected value 
+  ## of their peers without the three underscores. 
+  ## 
+  #
+    ___OFA_MY_DB_VAR=$OFA_DB_VAR/$ORACLE_SID
+    ___OFA_MY_DB_BKP=/backup/$ORACLE_SID/rman
+    ___OFA_MY_DB_DATA=/DB/$ORACLE_SID
+    ___OFA_MY_DB_ARCH=/arch/$ORACLE_SID
+    
+    ___spfile="/oracle/o11203/dbs/spfileDBAPOC02.ora"
+    ___log_archive_dest_1="LOCATION=/arch/DBAPOC02"
+    ___diagnostic_dest="$___OFA_MY_DB_VAR"
+    ___background_dump_dest="$___diagnostic_dest/diag/rdbms/$oracle_sid/$ORACLE_SID/trace"
+    ___user_dump_dest="$___diagnostic_dest/diag/rdbms/$oracle_sid/$ORACLE_SID/trace"
+    ___core_dump_dest="$___diagnostic_dest/diag/rdbms/$oracle_sid/$ORACLE_SID/cdump"
+    ___audit_file_dest="$___OFA_MY_DB_VAR/log/adump"
+    ___log_archive_format="%t_%s_%r.arc"
+    ___local_listener="LISTENER_$ORACLE_SID"

@@ -1,0 +1,70 @@
+  # --
+  ## Commands are run from STEPLIST
+  ## Run directory is RUN_DIR
+  ## Tip: if the TAG is a file, it is picked up as the STEPLIST
+  #
+    STEPLIST=${1:-"ofa_step.StepList.$TAG"}  
+    export RUN_DIR=${RUN_DIR:-""}
+    [[ ! -n "$RUN_DIR" ]] && RUN_DIR="$(dirname $STEPLIST)"
+
+    export \
+      OFA_BIN \
+      OFA_ETC \
+      OFA_FCT \
+      OFA_LOG \
+      OFA_SCR \
+      OFA_SQL \
+    ;
+
+    export OFA_TRAP_INT='ExitGently "INT"'
+
+  # --
+  ## Override Parameters: 
+  ## --------------------
+  ## FIRST=<n>  - start from task <n>
+  ## LAST=<n>   - stop after task <n>
+  ## SKIP=<n,m> - skip tasks <n> and <m> (a comma-separated list with _no_ spaces)
+  #
+    FIRST=1       # modify to start from step N
+    LAST=10000000  # modify to stop after step N
+    SKIP="none"    # a comma-seperated list with _no_ whitespace
+    FORCE="OFF"    # If on, forces CONT_DFLT to be "Y" even after a failure. 
+
+  # --
+  ## Error Handling should be adjusted to task at hand
+  #
+    OFA_ORA_DB_ERR_PAT="ORA-|SP2-"
+    OFA_ORA_SQLLDR_ERR_PAT="SQL\*Loader-[0-9]"
+    OFA_OS_ERR_PAT="denied|not found|Enter value|syntax|No such|: missing|Unable to open input file"
+
+    OFA_ERR_PAT="$OFA_ERR_PAT|$OFA_ORA_DB_ERR_PAT|$OFA_ORA_SQLLDR_ERR_PAT|$OFA_OS_ERR_PAT"
+    OFA_IGN_PAT="$OFA_IGN_PAT"
+    OFA_WRN_PAT="$OFA_WRN_PAT"
+
+  # --
+  # Mail Parameters
+  #
+    OFA_MAIL_RCP_GOOD="no mail"
+  #  OFA_MAIL_RCP_BAD="SPOC_DBA_MiddleWare@ubp.ch"
+    OFA_MAIL_RCP_BAD="no mail"
+
+ 
+  # --
+  # more log than usual 
+  #
+    OFA_MAIL_LOG_TAIL=1000 
+
+  # --
+  ## run mode
+  ## STEP_PROMPT=1|0 - leave at 1 (switches off automatically in batch mode)
+  ## EVAL=1|0        - 0: "raw" mode: no shell interpolation occurs except for "*"
+  ##                      Does not allow lining up of commands with seperators (pipes, ors, semicilons..))
+  ##                      Peculiar behaviour / not recommended for everyday use / may vary between OSs.
+  ##                 - 1: (default) "eval"'s commands (must protect metacharacters/use quotes:)
+  ##                      Shell vartiables are interpolated. 
+  ##                      Commands may be lined up with seperatorsr/piped etc.
+  ##                      Recommended for most uses.
+  #
+    STEP_PROMPT=1
+    EVAL=1
+

@@ -1,0 +1,32 @@
+  #
+  ##
+  ##  Set environment for Steplist:
+  ##    All settings take effect before execution starts
+  ##    and are guaranteed identical at the beginning of each step.
+  ##
+  #
+
+  #
+  ##  arg1 is the steplist file
+  ##  arg2 is LOCALDIR          (Local directory)
+  ##  arg3 is TAG               (Backup TAG     )
+  ##  arg4 is OVERWRITE         (Overwrite existing files or not)
+  ##  arg5 is MACHINE_NAME_DEST (Remote host)
+  ##  arg6 is REMOTE_USER       (Remote user)
+  ##  arg7 is PATH_BCK_DEST     (Remote path)
+  #
+    export LOCAL_DIR=$2
+    export LOCAL_FILES=$3
+    export REMOTE_USER=$4
+    export MACHINE_NAME_DEST=$5
+    export DEST_DIR=$6
+    export OFA_DOS2UNIX='dos2unix'
+
+    CheckVar              \
+        LOCAL_DIR         \
+        LOCAL_FILES       \
+        REMOTE_USER       \
+        MACHINE_NAME_DEST \
+        DEST_DIR       \
+    || BailOut "missings args"
+

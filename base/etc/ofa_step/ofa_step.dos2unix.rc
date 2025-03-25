@@ -1,0 +1,21 @@
+  #
+  ##
+  ##  Set environment for Steplist:
+  ##    All settings take effect before execution starts
+  ##    and are guaranteed identical at the beginning of each step.
+  ##
+  #
+
+  #
+  ##  arg1 is the steplist file
+  ##  arg2 is LOCAL_DIR         (Local directory)
+  ##  arg2 is LOCAL_FILES       (file names including patterns (*.sql, *.*, "a.sql b.sql")
+  #
+    export LOCAL_DIR=$2
+    export LOCAL_FILES=$3
+
+    CheckVar              \
+        LOCAL_DIR         \
+        LOCAL_FILES       \
+    || BailOut "missings args"
+

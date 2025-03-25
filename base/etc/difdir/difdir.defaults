@@ -1,0 +1,2 @@
+IGNORE="/logs/|/lost+found/|\.tar|\.tgz|/versions/"
+IGNORE="$IGNORE|/VERSION/"

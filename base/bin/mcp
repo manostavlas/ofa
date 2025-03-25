@@ -1,0 +1,61 @@
+#!/bin/ksh 
+# -----------------------------------------------------------------------------------------
+# Copyright 2012-2013-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+# -----------------------------------------------------------------------------------------
+#
+# mmv: "multiple move"
+# mcp: "multiple cp"
+#
+# Author: Olaf AHLERS, 2006
+# Modifications:
+#    20120315 - OLS: posé ce script
+# ------------------------------------------------------------------------------------
+
+script=$(basename $0)
+
+function usage {
+    echo "
+   $script: $cmd's all files whose names match <pattern-1> by substituting <pattern-2>.
+
+   Usage:
+       $script <pattern-1> <pattern-2> <files>
+
+   key:
+       <pattern-1>: string to match in file names
+       <pattern-2>: replacement string for <pattern-1>
+       <files>    : file list (may contain wildcard)
+
+   feature:
+       skips if a file with the new name already exists.
+"
+   exit 129
+}
+
+case $script in
+   mmv) cmd=mv
+        ;;
+   mcp) cmd=cp
+        ;;
+   *)   usage
+        ;;
+esac
+
+[[ $# -lt 3 ]] && usage
+
+p1=$1
+p2=$2
+shift
+shift
+filter=$@
+
+for oldname in $(ls -ld $filter|grep $p1|grep ^\-|awk '{print $NF}');do
+    newname=$(echo $oldname|sed "s/$p1/$p2/g")
+    if [[ -f $newname ]] ;then
+       echo "!!! $newname exists! --- skipping $cmd of $oldname !!!"
+       continue
+    else
+       echo "$cmd'ing $oldname to $newname"
+       $cmd $oldname $newname
+    fi
+done
+

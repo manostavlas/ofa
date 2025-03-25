@@ -1,0 +1,27 @@
+#
+# StepList for Refresh environment.
+# -------------------------------------------------------------------------
+# Each non-comment line is eval'd
+# acceptable comments are #, REM and --.
+# Invoke ofa_step.sh with the name of this file.
+# -------------------------------------------------------------------------
+
+--Check if local path exists
+[[ ! -d $PATH_BCK_SRC ]] && BailOut "Local directory $PATH_BCK_SRC does not exist!"
+
+echo $REMOTE_USER@${MACHINE_NAME_DEST}
+echo $PATH_BCK_DEST
+--If remote path does not exist, create it
+ssh $OFA_SSH_OPT $REMOTE_USER@${MACHINE_NAME_DEST} "[[ ! -d $PATH_BCK_DEST ]]" && ssh $REMOTE_USER@${MACHINE_NAME_DEST} "mkdir -p $PATH_BCK_DEST"
+
+
+--If remote path exist and overwrite is no, exit
+ssh $OFA_SSH_OPT $REMOTE_USER@${MACHINE_NAME_DEST} "[[ -d $PATH_BCK_DEST ]]" && [[ $OVERWRITE == 'N' ]] && BailOut "Local directory $PATH_BCK_DEST already exist (OVERWRITE='N') !"
+
+--Remove files if OVERWRITE='Y'
+ssh $OFA_SSH_OPT $REMOTE_USER@${MACHINE_NAME_DEST} "[[ -d $PATH_BCK_DEST ]]" && [[ $OVERWRITE == 'Y' ]] && ssh $REMOTE_USER@${MACHINE_NAME_DEST} "rm -rf $PATH_BCK_DEST/*"
+
+--Put files to remote host
+ssh $OFA_SSH_OPT $REMOTE_USER@${MACHINE_NAME_DEST} mkdir -p ${PATH_BCK_DEST}
+cd $PATH_BCK_SRC && tar -cvf - * | ssh $OFA_SSH_OPT $REMOTE_USER@${MACHINE_NAME_DEST} "cd ${PATH_BCK_DEST}; tar -xmvf -" || BailOut "push (tar) failed!"
+

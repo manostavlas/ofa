@@ -1,0 +1,18 @@
+#
+# StepList EXAMPLE file.
+# Config file for your ora_step_deploy run.
+# Each non-comment line is eval'd
+# acceptable comments are "#", "REM" and "--".
+# Default naming convention for this file is StepList.$ORACLE_SID.rc.
+# If you name the file differently, have the STEPLIST variable point to it.
+#
+
+REM Whatever command, function, or script
+#
+#  For example, zou call a documented OFA function to run a script against the database::
+# 
+DoSqlLogged <path>/<to>/<file>.sql
+#
+# The program will run it, log it and make use of the return code. 
+#
+

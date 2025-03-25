@@ -1,0 +1,30 @@
+#
+# StepList for Refresh environment.
+# -------------------------------------------------------------------------
+# Each non-comment line is eval'd
+# acceptable comments are #, REM and --.
+# Invoke ofa_step.sh with the name of this file.
+# -------------------------------------------------------------------------
+
+-- Check if local path exists
+[[ ! -d $LOCALDIR ]] && mkdir -p $LOCALDIR
+
+-- Create TAG directory
+[[ -d $PATH_BCK_DEST ]] && [[ $OVERWRITE == 'N' ]] && BailOut "Local directory $PATH_BCK_DEST already exist!"
+[[ ! -d $PATH_BCK_DEST ]] && mkdir -p $PATH_BCK_DEST
+
+[[ -d $PATH_BCK_DEST ]] && [[ $OVERWRITE == 'Y' ]] && rm -rf $PATH_BCK_DEST/*
+
+-- Check space in backup directory
+
+echo "Login: ${REMOTE_USER}@${MACHINE_NAME_SRC}"
+echo "Source Dir: ${PATH_BCK_SRC}"
+
+BackUpDir=$(df -P $PATH_BCK_DEST | awk '{print $4}' | tail -1) && echo "Backup Dir: $PATH_BCK_DEST Size: $BackUpDir KB"
+BackupSizeRepo=$(ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ${REMOTE_USER}@${MACHINE_NAME_SRC} "du -ks ${PATH_BCK_SRC}" |  cut -f1 -d"/") && echo "Backup repo: ${PATH_BCK_SRC} Size: $BackupSizeRepo KB"
+
+let DIFF=$(df -P $PATH_BCK_DEST | awk '{print $4}' | tail -1)-$(ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ${REMOTE_USER}@${MACHINE_NAME_SRC} "du -ks ${PATH_BCK_SRC}" | awk '{print $1}') &&  echo "Difference $DIFF" && [[ $DIFF -gt 1024 ]] || BailOut "Dir.: ${PATH_BCK_DEST} to small......."
+
+-- Get files from source server
+scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -rp $REMOTE_USER@${MACHINE_NAME_SRC}:${PATH_BCK_SRC}/* $PATH_BCK_DEST ||BailOut "scp failed!"
+
