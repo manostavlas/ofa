@@ -1,0 +1,30 @@
+---
+
+parameters:
+  - name: env_trigram
+
+
+jobs:
+
+  - deployment:  ${{ parameters.env_trigram }}_Promotion
+    displayName: Promote artefact to ${{ parameters.env_trigram }}
+
+    pool:
+      name: Pool-MS
+
+    environment: ${{ parameters.env_trigram }}
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+            - download: none
+
+            - task: AlmArtifactoryPromotion@1
+              inputs:
+                almTargetRepository:  ${{ parameters.env_trigram }}
+                almPromotionMessage:  Promote OFA package to ${{ parameters.env_trigram }}
+                almPackageType:       ubp_applications
+                almJfrogCliPath:      D:\tools\jfrog
+                almJfrogCliVersion:   jfrog-cli-latest.exe

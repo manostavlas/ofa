@@ -1,0 +1,69 @@
+---
+stages:
+
+  - stage: Build_OFA_Artefact
+    displayName: Build OFA Artefact
+    jobs:
+      - template: 01-create_product_artefact.yml
+
+  - stage: Publish_OFA_Artefact_to_Artifactory
+    displayName: Publish OFA Artefact to Artifactory
+    dependsOn:
+      - Build_OFA_Artefact
+    condition: |
+      and(
+        succeeded(),
+        or (
+            eq( variables['Build.SourceBranchName'], 'master'       ),
+            eq( variables['Build.Reason']          , 'PullRequest')
+        )
+      )
+    jobs:
+      - template: 02-publish_artefact_to_artifactory.yml
+
+  # - stage: Deploy_EV0
+  #   displayName: Deploy on EV0 environment
+  #   dependsOn:
+  #     - Build_OFA_Artefact
+  #     - Publish_OFA_Artefact_to_Artifactory
+  #   jobs:
+  #     - template: 03-deploy_in_ev0.yml
+
+
+  # - stage: EVX_Promotion
+  #   displayName: Promote OFA artefact to EVX
+  #   dependsOn:
+  #     - Deploy_EV0
+  #   condition: and( succeeded(), eq( variables['Build.SourceBranchName'], 'master' ) )
+  #   jobs:
+  #     - template: 04-promote_artifact.yml
+  #       parameters:
+  #         env_trigram: EVX
+
+  - stage: EVX_Promotion
+    displayName: Promote OFA artefact to EVX
+    dependsOn:
+      - Publish_OFA_Artefact_to_Artifactory
+    condition: |
+      and(
+        succeeded(),
+        eq( variables['Build.SourceBranchName'], 'master' )
+      )
+    jobs:
+      - template: 04-promote_artifact.yml
+        parameters:
+          env_trigram: EVX
+
+  - stage: PRD_Promotion
+    displayName: Promote OFA artefact to Production
+    dependsOn:
+      - EVX_Promotion
+    condition: |
+      and(
+        succeeded(),
+        eq( variables['Build.SourceBranchName'], 'master' )
+      )
+    jobs:
+      - template: 04-promote_artifact.yml
+        parameters:
+          env_trigram: PRD

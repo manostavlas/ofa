@@ -1,0 +1,31 @@
+---
+
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - '*'
+  paths:
+    include:
+      - ofa/stuff/*
+      - ofa/local/base/*
+      - ofa/local/oracle/*
+
+pr:
+  autoCancel: True
+  branches:
+    include:
+      - master
+  paths:
+    include:
+      - ofa/stuff/*
+      - ofa/local/base/*
+      - ofa/local/oracle/*
+
+variables:
+
+  - group: ofa_product_oracle
+
+stages:
+  - template: templates/ofa_product.yml

@@ -1,0 +1,36 @@
+---
+
+
+jobs:
+
+  - deployment:  Deploy_OFA_EV0
+    displayName: Deploy OFA on EV0 test Servers
+
+    pool:
+      name: Pool-MS
+
+    variables:
+      - name:  ofa_install_version
+        value: $[ stageDependencies.Build_OFA_Artefact.Create_OFA_Artefact.outputs[ 'NewVersion.OfaBaseVersion' ] ]
+
+    environment: EV0
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+            - download: none
+
+            - task: AlmAnsibLeTower@1
+              inputs:
+                almEndpointName:              AlmTower_OFA
+                almTargetedTowerEnvironment:  EVZ
+                almUniqueIdentifier:          ofa
+                almTargetedEnvironment:       evz
+                almPlaybookName:              Check_Connectivity
+                almPlaybookLimit:             $(ofa_test_servers)
+                almPlaybookExtraVars: |
+                  {
+                    "ofa_install_version": "$(ofa_install_version)"
+                  }

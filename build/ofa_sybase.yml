@@ -1,0 +1,32 @@
+---
+
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - '*'
+  paths:
+    include:
+      - ofa/stuff/*
+      - ofa/local/base/*
+      - ofa/local/sybase/*
+
+pr:
+  autoCancel: True
+  branches:
+    include:
+      - master
+  paths:
+    include:
+      - ofa/stuff/*
+      - ofa/local/base/*
+      - ofa/local/sybase/*
+
+variables:
+
+  - group: ofa_product_sybase
+
+stages:
+  - template: templates/ofa_product.yml
+

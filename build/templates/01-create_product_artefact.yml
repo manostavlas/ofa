@@ -1,0 +1,79 @@
+
+jobs:
+
+  - job: Create_OFA_Artefact
+
+    workspace:
+      clean: all
+
+    pool:
+      name: Pool-LX
+
+    variables:
+      - name:  SCRIPTS_DIR
+        value: build/scripts
+
+      - group: ofa_artifactory
+
+    steps:
+
+      - checkout: self
+        clean: true
+        persistCredentials: true
+
+      - script: |
+          echo "##vso[task.prependpath]$(System.DefaultWorkingDirectory)/$(SCRIPTS_DIR)"
+          env
+        displayName: 'Set PATH to scripts'
+
+      - task: Bash@3
+        displayName: 'Search latest OFA Version'
+        name: LatestVersion
+        inputs:
+          filePath: $(SCRIPTS_DIR)/artifact_latest_version.sh
+          arguments: >-
+            --url $(ofa_artifact_url)
+            --repo $(ofa_artifact_repo)
+            --group $(ofa_artifact_group_id)
+            --artifact $(ofa_artifact_id_pre)_$(ofa_product)
+            --default $(ofa_major_minor_version).0
+        env:
+          ART_USER: $(ofa_artifactory_user)
+          ART_PASS: $(ofa_artifactory_password)
+
+      - task: Bash@3
+        displayName: 'Calulate new OFA Version'
+        name: NewVersion
+        inputs:
+          filePath: $(SCRIPTS_DIR)/artifact_new_version.sh
+          arguments: >-
+            --start $(ofa_major_minor_version).0
+            --latest $(LatestVersion.OfaVersion)
+
+      - task: Bash@3
+        displayName: 'Create Archive'
+        name: CreateArchive
+        inputs:
+          filePath: $(SCRIPTS_DIR)/create_archive.sh
+          arguments: >-
+            --type $(ofa_product)
+            --version $(NewVersion.OfaBaseVersion)
+            --build $(NewVersion.OfaBuildNumber)
+
+
+      - task: PublishBuildArtifacts@1
+        displayName: Publish artifact output to Pipeline
+        inputs:
+          publishLocation: Container
+          artifactName:    $(CreateArchive.OfaArtifactName)
+          pathToPublish:   tmp/$(CreateArchive.OfaArtifactName)
+
+      - task: Bash@3
+        displayName: Tag master with new version
+        condition: and( succeeded(), eq( variables['Build.SourceBranchName'], 'master' ) )
+        inputs:
+          filePath: $(SCRIPTS_DIR)/tag_master.sh
+          arguments: >-
+            --version $(NewVersion.OfaBaseVersion)
+            --product $(ofa_product)
+

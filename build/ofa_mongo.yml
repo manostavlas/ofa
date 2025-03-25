@@ -1,0 +1,32 @@
+---
+
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - '*'
+  paths:
+    include:
+      - ofa/stuff/*
+      - ofa/local/base/*
+      - ofa/local/mongo/*
+
+pr:
+  autoCancel: True
+  branches:
+    include:
+      - master
+  paths:
+    include:
+      - ofa/stuff/*
+      - ofa/local/base/*
+      - ofa/local/mongo/*
+
+variables:
+
+  - group: ofa_product_mongo
+
+stages:
+  - template: templates/ofa_product.yml
+
