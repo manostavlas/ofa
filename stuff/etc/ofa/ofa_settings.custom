@@ -1,0 +1,31 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+  # 
+  # This file should only contain assignments corresponding to the site_settings.sample file.
+  # 
+  # Note:
+  #  This file is never overwritten by any vendor release.
+  #  Only the site_settings.sample files is supplied from the bundle.
+  #
+    OFA_DOC_URL="http://sppublic/teams/dba/Doc%20Internal/Oracle/Normes%20et%20Standards/OFA_V1.1.en.doc"
+    OFA_SCRIPT_GUIDE_URL="http://sppublic/teams/dba/Doc%20Internal/Oracle/Normes%20et%20Standards/OFA_s%20Scripting%20Guide.doc"
+  # OFA_MAIL_RCP_DFLT="SPOC_DBA_MiddleWare@ubp.ch" # Default mail recipients
+    OFA_MAIL_RCP_DFLT="no mail" # Default mail recipients
+  # OFA_MAIL_RCP_GOOD="SPOC_DBA_MiddleWare@ubp.ch"                    # Success mail recipients
+    OFA_MAIL_RCP_GOOD="no mail"                    # Success mail recipients
+  #  OFA_MAIL_RCP_BAD="SPOC_DBA_MiddleWare@ubp.ch"  # Error   mail recipients
+    OFA_MAIL_RCP_BAD="no mail"  # Error   mail recipients
+
+    OFA_SCRIPT_AUTO_INIT=1
+
+    OFA_TRAP_HUP="MailLogReport        HUP" # Action on hang-up
+    OFA_TRAP_INT=""                         # Action on interrupt: no action
+    OFA_TRAP_TRM="MailLogReport Terminated" # Action on hang-up
+    OFA_TRAP_XIT="MailLogReport   Finished" # Action on exit
+
+  # ================================
+  # Other environment
+  # ----
+    OFA_SSH_OPT="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+

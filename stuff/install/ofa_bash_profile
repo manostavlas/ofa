@@ -1,0 +1,4 @@
+tty -s && alias ofa2=". ~/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2}')/etc/ofa/0fa_load.rc"
+tty -s && echo "# \"ofa2\" loads ofa (v2) #"
+tty -s && ofa2
+

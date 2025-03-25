@@ -1,0 +1,547 @@
+  # ----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+  #
+  # 0fa_load.rc
+  #
+  ## Name: 0fa_load.rc
+  ##
+  ## In:  ofa resource files
+  ## Out: environment 
+  ## Ret: 0
+  ##
+  ## Synopsis: loads ofa settings & libraries
+  ##
+  ## Usage: . 0fa_load.rc
+  ##
+  ## Description:
+  ##
+  ##    If successful, the OFA_STD_SETTINGS_LOADED environment variable
+  ##    contains "1", and the environment is operational.
+  ##
+  ## Workings:
+  ##
+  ##    Loads "ofa" libraries and configuration files in accordance with
+  ##    the context in which it is loaded. 
+  ##   
+  #
+
+  #
+  # If ofa was already loaded, unload it first 
+  #
+    [[ -n "$OFA_STD_FUNCTIONS_LOADED" ]] && UnloadOfa
+  #
+  # A few variables need to be exported
+  # So they can be set by the invoking shell in script context
+  #
+    export OFA_CONS_VOL=${OFA_CONS_VOL:-0}
+    [[ $OFA_CONS_VOL -lt 0 ]] && OFA_CONS_VOL=0
+
+  #
+  # some variables need to be saved
+  #
+    [[ -n "OFA_BASE" ]] && OFA_BASE_OLD=$OFA_BASE
+    [[ -n "CDPATH"   ]] && CDPATH_OLD=$CDPATH
+    [[ -n "SQLPATH"  ]] && SQLPATH_OLD=$SQLPATH
+    [[ -n "PATH"     ]] && PATH_OLD=$PATH
+  #
+  # return 1 unless LOADER_RV is explicitly set to 0 (at the end)
+  #
+    typeset LOADER_RV=1
+
+  #
+  # Set up early logging
+  # - Function "EarlyLog" writes against Temporary logfile OFA_EARLY_LOG.
+  #   OFA_EARLY_LOG will be deleted at end of this script, but it is
+  #   picked up if permanent logging is started before that time.
+  #
+    [[ ! -d  /ofa/local/$USER/logs/tmp ]] && mkdir -p /ofa/local/$USER/logs/tmp 
+
+    [[ -d  /ofa/local/$USER/logs/tmp ]] && chmod 777 /ofa/local/$USER/logs/tmp > /dev/null 2>&1
+
+ 
+    OFA_EARLY_LOG=/ofa/local/$USER/logs/tmp/ofa.earlylog.$(date "+%Y_%m_%d_%H%M%S").$$.$PPID
+    touch "$OFA_EARLY_LOG"
+    if [[ $? -eq 0 ]]
+    then
+	function EarlyLog {
+            if [[ $OFA_CONS_VOL -gt 2 ]] || ! tty -s 
+            then
+                echo "$(date "+%Y_%m_%d_%H%M%S") - $*" 1>&2 
+            fi
+            echo "$(date "+%Y_%m_%d_%H%M%S") - $*" >> "$OFA_EARLY_LOG"
+            return 0
+        }
+    else
+        function EarlyLog {
+            [[ $OFA_CONS_VOL -gt 1 ]] && echo "$(date "+%Y_%m_%d_%H%M%S") - $@" 1>&2;
+            return 0
+        }
+    fi
+    function EarlyCons {
+        OFA_CONS_VOL_B4=${OFA_CONS_VOL:-"0"}
+        OFA_CONS_VOL=3
+        EarlyLog "$*"
+        OFA_CONS_VOL=$OFA_CONS_VOL_B4
+    }
+    EarlyLog "Early Logging Started"
+    EarlyLog "EarlyLog writes to file at volume above 1, plus to stderr at volume above 2"
+    EarlyLog "Start 0fa_load.rc"
+
+  #
+  # cancel any conflicting settings from env.
+  #
+
+
+    EarlyLog "inhibiting verbose and unaliasing ls"
+    set +x
+    alias ls=ls
+
+
+  #
+  # posix compatibility workaround: some systems do not accept one or the other syntax.
+  # Namely SunOS has incomplete posix support.
+  #
+    echo "a a" | egrep "[[:space:]]" >/dev/null && _SPACE_="[:space:]" || _SPACE_=" "
+    echo "aaa" | egrep "[[:alpha:]]" >/dev/null && _ALPHA_="[:alpha:]" || _ALPHA_="A-z"
+    echo "123" | egrep "[[:digit:]]" >/dev/null && _DIGIT_="[:digit:]" || _DIGIT_="0-9"
+    echo "a1a" | egrep "[[:alnum:]]" >/dev/null && _ALNUM_="[:alnum:]" || _ALNUM_="A-z0-9"
+  #ks
+  # check posix workaround
+  #
+    OFA_UNSUPP_SHELL=0
+    echo "a a" | egrep "[${_SPACE_}]" >/dev/null || let OFA_UNSUPP_SHELL+=1
+    echo "aaa" | egrep "[${_ALPHA_}]" >/dev/null || let OFA_UNSUPP_SHELL+=3
+    echo "123" | egrep "[${_DIGIT_}]" >/dev/null || let OFA_UNSUPP_SHELL+=5
+    echo "a1a" | egrep "[${_ALNUM_}]" >/dev/null || let OFA_UNSUPP_SHELL+=7
+    if [[ $OFA_UNSUPP_SHELL -gt 0 ]]
+    then
+        EarlyCons "ERROR: Shell does not support regexp syntax -- check with implementer"
+        return 88
+    fi
+
+
+  # --------------------------------------------
+  # Section: resource markers (begin)
+  # Variables needed to pick up resource files:
+  # - USER
+  # - HOSTNAME
+  # - OSNAME
+  # - TAG
+  # --------------------------------------------
+  # USER
+  #
+     USER="$(id | sed 's/[()]/ /g' | awk '{print $2'})"
+     EarlyLog "Username is: \"$USER\""
+  #
+  # HOSTNAME
+  #
+    HOSTNAME=$(uname -n)
+    EarlyLog "Hostname is: \"$HOSTNAME\""
+  #
+  # OSNAME
+  #
+    OSNAME=$(uname)
+    EarlyLog "OS name is: \"$OSNAME\""
+  #
+  # OFA_TAG
+  #
+  if [ -z "$OFA_TAG" ]; then 
+    if [[ "$1" = *"0fa_load.rc" ]]
+    then
+        shift 1
+    fi
+    if [[ -n "$1" ]] && [[ $1 != *"="* ]]
+    then
+        OFA_TAG="$(basename "$1"|sed 's/[^[:alnum:]_-]/./g;s/\.\.*/./g')"
+    else
+        OFA_TAG="no_tag"
+    fi
+    EarlyLog "Tag is: \"$OFA_TAG\""
+  fi
+  # --------------------------------------------
+  # Section: resource markers (end)
+  # --------------------------------------------
+
+  #
+  # Mail
+  #
+    OFA_MAIL_PROG=""
+    [[ ! -n "$OFA_MAIL_PROG" ]] && type mailx 2>/dev/null >/dev/null && OFA_MAIL_PROG="mailx"
+    [[ ! -n "$OFA_MAIL_PROG" ]] && type mail  2>/dev/null >/dev/null && OFA_MAIL_PROG="mail"
+    if [[ ! -n "$OFA_MAIL_PROG" ]] 
+    then
+        echo "
+    #-----------------------------
+    # WARNING: no mail program found.
+    #-----------------------------
+    " 
+        EarlyLog "Warning: no mail program found"
+    else
+        EarlyLog "Mail program is: \"$OFA_MAIL_PROG\""
+    fi
+
+  # ============================================================================
+  # Determining the environment
+  # There are only 3 cases that work:
+  #  - you're hardwired from $HOME
+  #  - you're hardwired from root
+  #  - you're not hardwired but have presets
+  # All other cases are ignored.
+  # ============================================================================
+  #
+  #
+  # Make sure OFA_BASE is void
+  #
+    OFA_BASE=""
+  #
+  # CASE 1: hardwired from $HOME
+  #  - A symlink in $HOME points to the actual OFA_ROOT.
+  #  - The name of this link is the Graft Product, unless it is pre-set
+  # This is the recommended setting.
+  #
+    if [[ ! -n $OFA_BASE ]]
+    then 
+        OFA_HW2HOME=$(ls -1 $HOME/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc 2>/dev/null \
+                | grep "/" \
+                | awk 'END{print NR}' \
+               )
+        if [[ $OFA_HW2HOME -gt 1 ]]
+        then
+            EarlyLog "Error: there are $OFA_HW2HOME links to ofa in \$HOME - panic, cannot load"
+            return 22
+        elif [[ $OFA_HW2HOME -eq 1 ]]
+        then
+            OFA_ROOT=$(ls -1 $HOME/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc 2>/dev/null \
+                             | sed "s@\($HOME/[^/][^/]*\).*@\1@"
+                             )
+          #
+          # determine Graft PRoduct
+          #
+            if [[ ! -n $OFA_GRAFT ]]
+            then
+                OFA_GRAFT="$(basename $OFA_ROOT)"
+            fi
+            [[ $OFA_GRAFT = "base" ]] && [[ ! -d $OFA_ROOT/local/base ]] && OFA_GRAFT="ofa"
+          #
+          # Client or Master
+          #
+            if [[ $(ls -1 $OFA_ROOT/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/?*?/${OFA_GRAFT}_settings.* 2>/dev/null | awk 'END{print NR}') -gt 0 ]]
+            then
+              #
+              # In a deployed environment, Graft Products are in local/$USER
+              # This enables several users to run the same graft product, but each in their private area. 
+              # The name of the graft product is the name that points to the ofa root from their $HOME.
+              # Version information should display "currently running from /.../$USER"
+              #
+                OFA_BASE=$OFA_ROOT/local/$USER
+                OFA_LOADER_CASE="1"
+                EarlyLog "OFA_BASE determined in CASE $OFA_LOADER_CASE"
+              #
+            fi
+        fi
+    fi
+  #
+  # CASE 2: hardwired from root
+  #   - A path /<graft-product>/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc exists
+  #   - The the root member of that path is the graft product
+  #   - The OFA ROOT is /ofa - there is no acceptable way to detect it if otherwise.
+  # This case is a lot less flexible than case 1 because it reflects a legacy setup:
+  #  - you cannot override the Graft Product
+  #  - you cannot have the actual ofa installed in any location other than /ofa.
+  # This setup is deprecated in v2 and should be phased out.
+  #
+    if [[ ! -n $OFA_BASE ]]
+    then 
+        OFA_HW2ROOT=$(ls -1 /*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc 2>/dev/null \
+                | grep "/"          \
+                | grep -v "^/ofa/"    \
+                | awk 'END{print NR}' \
+               )
+        if [[ $OFA_HW2ROOT -eq 1 ]]
+        then
+            OFA_BASE=$(ls -1 /*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc 2>/dev/null \
+                | grep "/"                    \
+                | grep -v "^/ofa/"              \
+                | sed 's@etc/ofa/0fa_load.rc@@' \
+            )
+            OFA_GRAFT="$(echo $OFA_BASE | tr "/" " " | awk '{print $1}')"
+            OFA_ROOT=/ofa
+            OFA_LOADER_CASE="2"
+            EarlyLog "OFA_BASE determined in CASE $OFA_LOADER_CASE"
+        fi
+    fi
+  #
+  # CASE 3: not hardwired
+  #   - At least the graftproduct must be pre-set
+  #   - If OFA_ROOT is also pre-set
+  #
+    if [[ ! -n $OFA_BASE ]]
+    then 
+        if [[ ! -n $OFA_ROOT ]]
+        then
+            OFA_ROOT="/ofa"
+        fi
+        OFA_BASE=$OFA_ROOT/local/$OFA_GRAFT
+        OFA_LOADER_CASE="3"
+        EarlyLog "OFA_BASE determined in CASE $OFA_LOADER_CASE"
+    fi
+
+  #
+  # If OFA_BASE is still void, failure
+  #
+    if [[ ! -n "$OFA_BASE" ]] 
+    then
+        EarlyLog "ERROR: Couldn't determine OFA_BASE - cannot load" 
+        return 1
+    fi
+
+  # ============================================================================
+  # Checking Up 
+  #
+    if [[ $OFA_GRAFT != "base" ]] && [[ ! -r $OFA_BASE/etc/$OFA_GRAFT/${OFA_GRAFT}_settings.defaults ]]
+    then
+      #
+      # no PRODUCT - (except: "base")
+      #
+        EarlyCons "Error: no \"$OFA_BASE/etc/$OFA_GRAFT/${OFA_GRAFT}_settings.defaults\" -- cannot load"
+        return 22
+    fi
+    if [[ ! -r $OFA_ROOT/stuff/etc/ofa/0fa_load.rc ]]
+    then
+      #
+      # no STUFF -
+      #
+        EarlyCons "Error: stuff not found in \"$OFA_ROOT/stuff\" -- cannot load"
+        return 1
+    fi
+    if [[ ! -n $OFA_BASE ]]
+    then
+      #
+      # no OFA_BASE - 
+      #
+        EarlyCons "Error: No OFA_BASE -- cannot load"
+        EarlyCons "There are $OFA_HW2HOME ofa links in your $HOME directory"
+        EarlyCons "There are $OFA_HW2ROOT ofa links under /*/local/"
+        EarlyCons "OFA_ROOT is \"$OFA_ROOT\""
+        EarlyCons "OFA_GRAFT is \"$OFA_GRAFT\""
+        return 1
+    fi
+  #
+  # Additional test: for ofaadm, you must own the stuff
+  #
+    OFA_OWN=$(ls -l $OFA_ROOT/stuff/etc/ofa/0fa_load.rc|awk '{print $3}')
+    OFA_GRP=$(ls -l $OFA_ROOT/stuff/etc/ofa/0fa_load.rc|awk '{print $4}')
+    EarlyLog "Ofa (core) Owner is: \"$OFA_OWN\""
+    EarlyLog "Ofa Group is: \"$OFA_GRP\""
+    if [[ "$OFA_GRAFT" = "ofaadm" ]] \
+    && [[ "$USER" != "$OFA_OWN"           ]]
+    then
+        EarlyCons "ERROR: back-end: only $OFA_OWN can use this." >&2
+        [[ -n "$OFA_STD_SETTINGS_LOADED" ]] && UnloadOfa
+        return 99
+    fi
+  #
+  # ============================================================================
+  #
+  # fundamental variables
+  #
+    EarlyLog "OFA_GRAFT is: \"$OFA_GRAFT\""
+    EarlyLog "OFA_BASE is: \"$OFA_BASE\" - setting up \"components\"-paths"
+    export OFA_BIN=$OFA_BASE/bin
+    export OFA_DOC=$OFA_BASE/doc
+    export OFA_ETC=$OFA_BASE/etc
+    export OFA_FCT=$OFA_BASE/fct
+    export OFA_LOG=$OFA_BASE/logs
+    export OFA_SCR=$OFA_BASE/script
+    export OFA_SQL=$OFA_BASE/sql
+  #
+  # Resource Files
+  #
+    OFA_RESOURCE_MAP="$OFA_ETC/ofa/ofa_resource.map"
+  #
+  # Pre-load core functions
+  #
+    OFA_STD_FUNCTIONS_LOADED=""
+    . $OFA_FCT/ofa/ofa_functions.defaults >/dev/null 
+    OFA_WHOSTALKING=$(WhosTalking)
+    OFA_WHICHSCRIPT=$(WhichScript)
+  #
+  # Some resource file assignments are changed depending on context
+  #
+    OFA_MY_ETC=$OFA_ETC/$OFA_WHOSTALKING
+    OFA_MY_FCT=$OFA_FCT/$OFA_WHOSTALKING
+    OFA_MY_LOG=$OFA_LOG/$OFA_WHOSTALKING
+    IsInterActiveCLI && OFA_TAG="interactive" 
+  #
+  # ============================================================================
+  # Resource Paths
+  #
+  # These are a set of variables that contain valid File Paths relevant to the
+  # execution context, separated by whitespace.
+  #
+  # All resources are loaded through them: functions, settings, documentation
+  #
+  # They are potentially different depending on factors such as whether in a script or not, 
+  # which graft product, machine, os, program or argument is being used. 
+  #
+  # However, they are consistent throughout the lifetime of the shell that invoked the ofa. 
+  #
+  # This loop validates every resource list found in the first column of $OFA_RESOURCE_MAP
+  # Each line contains a Fully Qualified File Path made up from columns 3 and 4.
+  # If this resolves to an existing file or directory, it is added to the resource path
+  # (directories are used for the Dry3 paths, namely).
+  # If it doesn't, it is skipped. 
+  # It is normal that many resources do no exist. They're place holders, to be filled when needed. 
+  # The great advantage of this proceeding is that all resource paths are fully validated. 
+  # They can be used henceforth without further verification. 
+  #
+  # Note2:
+  #     While Resource Paths are processed alphabetically (as they come out of the unique sort), 
+  #     their members (the individual File Paths), are treated in order of appearance. 
+  #     This is absolutely crucial as in many cases, dependencies exist and/or overriding occurs. 
+  #
+    for RESPATH in $(egrep "^[${_SPACE_}]*[${_ALPHA_}]" $OFA_RESOURCE_MAP | cut -d":" -f1 | sort -u)
+    do
+        eval $RESPATH=\"\"    # " null var
+        typeset SEP=""
+        typeset TMPVAR=""
+        OFA_RESPATHS="$OFA_RESPATHS $RESPATH "
+        for FQFP in $(eval echo $(grep $RESPATH $OFA_RESOURCE_MAP | cut -d":" -f2 | sed 's@[${_SPACE_}]*:[${_SPACE_}]*@/@'))
+        do
+          #
+          # The -r test works on files and directories alike. 
+          # This is what we need.
+          #
+            if [[ -r $FQFP ]]
+            then
+                TMPVAR="$TMPVAR$SEP$FQFP"
+                SEP=" "
+            fi
+        done
+        DeDuPath TMPVAR
+        eval $RESPATH=\"$TMPVAR\"    #"
+        EarlyLog "Resource Path \"$RESPATH\": $(eval echo \$$RESPATH)"
+    done
+
+  # ============================================================================
+  #
+  # Loading some resources from Resource Paths:
+  # Note:
+  #     Resource Paths are processed in the order fed to the loop.
+  #     Each Resource Path contains a sequence of Fully Qualified File Paths. 
+  #
+    EarlyLog "loading from resource paths"
+    for RESPATH in    \
+        OFA_FUNX_PATH \
+        OFA_SETT_PATH \
+    ;do
+        for FQFP in $(Path $RESPATH)
+        do
+            EarlyLog "Load: $FQFP"
+            ! . $FQFP && EarlyLog "Failed Load from $RESPATH \"$FQFP\"" && return 1
+        done
+    done
+    
+  # ================================
+  # Script Auto Init (conditional) begin
+  #
+  # The typical sequence that should be part of any script is loaded automatically
+  # when OFA_SCRIPT_AUTO_INIT is 1. 
+  # This should be so in most cases and is the default.
+  # 
+  #
+    if  IsScript && [[ $OFA_SCRIPT_AUTO_INIT = "1" ]]
+    then
+      #
+      # trap any exit
+      #
+       trap '$OFA_TRAP_INT' INT
+       trap '$OFA_TRAP_TRM' TERM
+       trap '$OFA_TRAP_XIT' EXIT
+       trap '$OFA_TRAP_HUP' HUP
+      #
+      # Process overrides, pass 1
+      # This allows for in/line presets
+      #
+        [[ "$@" = *"="* ]] && ReadOverRideAssignments "$@"
+      #
+      # Load setting specific to the program
+      # Note the loop below makes only one iteration. 
+      # This syntax is used so it can be easily extended.
+      #
+        for RESPATH in    \
+            OFA_MY_SETT_PATH  \
+        ;do
+            for FQFP in $(Path $RESPATH)
+            do
+                EarlyLog "Load: $FQFP"
+                ! . $FQFP && EarlyLog "Failed Load from $RESPATH \"$FQFP\"" && return 1
+            done
+        done
+      #
+      # Start Logging
+      #
+        LogStart $@
+      #
+      # Perform "Dry3 Scan" (ofa-style) 
+      #
+        OFA_SCANTREE_POINT=OFA_DRY3_PATH
+        ! Dry3  && EarlyLog "Failed Dry3 on $OFA_SCANTREE_POINT" && return 1
+      #
+      # Process overrides, pass 2
+      # This re-instates the override in case it were itself overridden during the load process.
+      #
+        [[ "$@" = *"="* ]] && ReadOverRideAssignments "$@"
+    fi 
+  #
+  # Script Auto Init (conditional) end
+  # ================================
+
+    CleanPath   \
+        PATH    \
+        CDPATH  \
+    ;
+
+  #
+  # Welcome screen
+  #
+    if IsInterActiveCLI && [[ $OFA_SPLASH != "0" ]]
+    then
+      OfaBonJour
+    fi
+
+  #
+  # _ShOw
+  #
+    _SHOW=$(set|egrep -i " *^sh[o0]w="|head -1)
+    if [[ -n "$_SHOW" ]]
+    then
+        _NB_SHOW_VARS=$(set|egrep -i " *^sh[o0]w="|awk 'END{print NR}')
+        if [[ $_NB_SHOW_VARS -gt 1 ]]
+        then
+            LogError "Found $_NB_SHOW_VARS variables that look like \"SHOW\""
+            set|egrep -i " *^sh[o0]w=" | LogCartRidge
+            BailOut "Cannot handle environment that has more than 1 variables that look like the word \"SHOW\""
+        fi
+        _ShOw=$(echo $_SHOW | sed 's/.*=//')
+        echo $_ShOw | egrep -i "Y|y" >/dev/null && _ShOw=4
+        if [[ -n $(echo $_ShOw | egrep "^[${_DIGIT_}][${_DIGIT_}]*$") ]]
+        then
+            [[ "$_ShOw" -ge 1 ]] && OfaShowVersion 
+            [[ "$_ShOw" -ge 2 ]] && ShowResPaths 
+            [[ "$_ShOw" -ge 3 ]] && ShowResVars 
+            [[ "$_ShOw" -ge 1 ]] && ShowKeyVarsFromLoader 
+            [[ "$_ShOw" -gt 0 ]] && HorizontalBar && ExitGently
+        fi
+    fi
+
+  #
+  # delete early logfile
+  #
+    rm -f $OFA_EARLY_LOG
+    OFA_EARLY_LOG=""
+
+    LOADER_RV=0
+    return $LOADER_RV
+

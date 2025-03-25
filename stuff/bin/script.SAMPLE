@@ -1,0 +1,36 @@
+#!/bin/ksh
+#
+# This template supplies the most basic ofa mateiral for scripting
+# Even only the first line will esure yo get a log, mail and error checking. 
+#
+
+  #
+  # load ofa
+  #
+    . ~/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc $@ || exit 22
+
+  # -- whilst you want no mail exit, unset exit trap
+  #
+     unset OFA_TRAP_XIT
+     unset OFA_TRAP_HUP  
+     unset OFA_TRAP_INT 
+     unset OFA_TRAP_TRM
+
+  # -- Alternatively, if you want to receive mail yourself instead of your group
+  #
+    OFA_MAIL_RCP_GOOD="me@shop.com"
+    OFA_MAIL_RCP_BAD="me@shop.com"
+  #
+  # Note:equality parameters can be passed in on the command line, like
+  # MyScript.sh Arg1 Agr2 Argn OFA_MAIL_RCP_GOOD="me@shop.com" 
+
+  # use LogIt and LogStdIn functions for logging
+  #
+    LogIt "For The Record!"  # Single line log
+    cat $0 | LogStdIn        # Multiline Log
+
+  # Use the BailOut function to exit on error.
+  #
+    [[ $? -ne 0 ]] && BailOut "This was bad!"
+
+     

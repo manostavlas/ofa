@@ -1,0 +1,58 @@
+#!/bin/bash
+# chkconfig: 35 99 01
+#
+# description: Starts and stops Oracle services
+# ------------------------------------------------------------------------------
+#
+# SYNOPSIS
+#  oracle_start_stop
+#
+# DESCRIPTION
+#  Oracle server control script
+#
+# INSTALL
+#
+#  To be added to chkconfig :
+#     cp oracle_start_stop.rc /etc/init.d/oracle_start_stop
+#     chown root:root /etc/init.d/oracle_start_stop
+#     chmod 755 /etc/init.d/
+#     chkconfig --add oracle_start_stop
+#     chkconfig oracle_start_stop on
+#
+# OPTION
+#  start        : start application
+#  stop         : stop application
+#
+# REVISION
+#
+#  $Revision: v1.00 $
+#  $Author: asg $
+#  $Date: 2017-01-14$
+#
+# -----------------------------
+
+start() {
+echo  "in start    " >> /tmp/script.out
+        echo "Starting Sybase services: "
+    su - dba -c "nohup /ofa/local/mongo/bin/AllStartStop.sh start > /tmp/startORA.log"
+}
+
+stop() {
+        echo "in stop >> /tmp/script.out"
+    echo "Shutting down Sybase services: "
+    su - dba -c "nohup /ofa/local/mongo/bin/AllStartStop.sh stop > /tmp/stopORA.log"
+}
+
+case "$1" in
+        start)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+           *)
+        echo $"Usage: $0 {start|stop}"
+        exit 1
+    ;;
+esac
+

@@ -1,0 +1,89 @@
+
+    .--------------------------------------.
+    |  Scripting                           |
+    '--------------------------------------'
+
+  Ofa scripting is like any other shell scripting, except some things are automated. 
+  This is especially true with OFA_SCRIPT_AUTO_LOAD=1 (default and recommended). 
+
+  Loading OFA
+  -----------
+
+    To make a script load the "ofa", include this line near the top: 
+
+      . ~/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc || exit 22
+
+      This loader does the following: 
+
+        - loads all general ofa file resources
+        - makes $1 into $OFA_TAG
+ 
+      plus, when  OFA_SCRIPT_AUTO_LOAD=1
+    
+        - loads the script's relevant file resources
+        - starts logging 
+        - logs the invoking command line with all arguments for the record.
+        - sets traps for error checking and reporting per mail (if configured)
+        - executes override assignments passed in on the command line (a=b)
+        - scans the dry3 structures (if available)
+
+      Only then is the next line of your script processed. 
+
+  Parameters
+  ----------
+
+    Program parameters and options can still be passed on the command line and processed
+    as positional parameters or via getopt. 
+    
+    However, it is better to use parameter files. 
+    The parameter file location for your script is in $OFA_ETC/<your-script> (without extension)
+
+    Your default parameter file is named <your-script>.defaults or <your-script>.custom.
+    Specific settings are in additional files named <your-script>.$OFA_TAG.
+    The OFA_TAG is the first argument with any heading path ("*/") stripped.
+
+    If you still need $2, $3 etc or -options, no problem: you are in no way limited.
+
+    The ofa also also allows you to assign variables directly on the command line. 
+    These assignments override any pre-sets as well as assignments from parameter files. 
+
+  Leverage Functionality
+  ----------------------
+
+    It is good to make use of ofa functionality once you have it available. 
+    A few functions should be considered whatever your scripting needs: 
+
+      Logging
+
+          - LogIt    : Logs its arguments
+          - LogErr   : Logs an error
+          - LogStdIn : Logs stdin (produce-output | LogStdIn)
+  
+          There are more (type "ofa log")
+          Your script's log files are in $OFA_LOGS/<your-script>  (without extension)
+
+      Usage
+
+          The "Usage" function will display documentation about your script and quit.
+          You'll never have to write your own "usage" function again. 
+
+          - Usage "script takes no argument"
+
+      BailOut | ExitGently
+
+          BailOut causes your script to log an error and exit with a non-zero code. 
+          Generaly this leads to an error report sent by mail. 
+          If you want to avoid this, you can use the ExitGently function. 
+
+      Trap functionality
+
+          Ofa controls post-exit processing through variables associated with traps:
+
+          - OFA_TRAP_HUP   - hangup (e.g. terminal is closed)
+          - OFA_TRAP_INT   - e.g. control-C
+          - OFA_TRAP_TRM   - kill
+          - OFA_TRAP_XIT   - normal exit
+
+          By modifying them, you change the behaviour of your script. 
+          Note that the "ExtitGently" function sets OFA_TRAP_XIT to null.
+

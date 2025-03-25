@@ -1,0 +1,26 @@
+    .---------------------------------------------------------------------------.
+    |                    --- ofa for ofa (admin environment)                    |
+    |-- Commands 101 --------------------------------- cd paths* ---------------|
+    |                                             |                             |
+    | vu, vd, vl ......  - volume up, down, level |  staging   $OFA_ROOT/staging|
+    | v1 ..............  - default verbosity      |  logs      $OFA_BASE/logs   |
+    | v0 ..............  - script-style verbosity |  bin       $OFA_BASE/bin    |
+    | bonjour|bj|hi ...  - this screen            |                             |
+    |                                             |                             |
+    |-- "ofa"-style scripts available ------------|                             |
+    |                                             |-- paths --------------------|
+    | bundle_ofa.sh ("bofa") - make bundle        |                             |
+    | deploy_ofa.sh ("dofa") - deploy file/bundle |  path, sqlpath, cdpath      |
+    |                                             |                             | 
+    |- Documentation -----------------------------------------------------------|
+    |                                                                           |
+    | ofa                 # ofa overview                                        |
+    | ofa list            # list all                                            |
+    | ofa alias           # list ofa aliases                                    |
+    | ofa function        # list ofa functions                                  |
+    | ofa variable        # list ofa variables                                  |
+    | ofa script          # list ofa style scripts                              |
+    | ofa [help] <thing>  # show ofa documentation on <thing>                   |
+    |                                                                           |
+    '---------------------------------------------------------------------------'
+

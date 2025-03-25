@@ -1,0 +1,19 @@
+--.
+--REM Name: <file or function name>                      
+--REM                                                    
+--REM In:  <input>                                       
+--REM Out: <output>                                      
+--REM Ret: <return values>                               
+--REM                                                    
+--REM Synopsis: <short description of purpose and effect>
+--REM                                                    
+--REM Usage: <"Usage" text>                              
+--REM                                                    
+--REM Description:                                       
+--REM                                                    
+--REM    <All useful explanatory text.>                  
+--REM                                                    
+--REM Workings:                                          
+--REM                                                    
+--REM    <Description of how it works>                   
+--.

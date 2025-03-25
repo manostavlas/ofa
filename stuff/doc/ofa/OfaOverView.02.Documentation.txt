@@ -1,0 +1,84 @@
+
+    .--------------------------------------.
+    |  Documentation                       |
+    '--------------------------------------'
+  
+  The ofa has a tightly integrated documentation system that works on the
+  basis of introspection. It dynamically extracts information about
+  all its constituent parts as required and presents them in a uniform
+  way. 
+
+    In Scripts
+    ----------
+
+      Usage
+
+          The ofa base library has a Function called "Usage" that invokes this
+          instrospective help system on the running script. 
+          When invoked from within a script, it displays all documentation available 
+          from the script and its parameter files, then terminates the script.
+
+             Usage "Script takes no arguments" 
+
+      Documenting Scripts
+
+          Ofa extracts textual documentation from scripts, functions and parameter
+          files by looking for lines starting with double sharps - "##", or "--REM"
+          (in SQL scripts). 
+          Effective documenting is done by using the documentation template, 
+          which is displayed by the OfaDocTemplate function. 
+
+    Interactive
+    -----------
+
+      The ofa documentation system is aliased "ofa", so anyone with the ability
+      to remember these three letters has the potential of becoming proficient 
+      in ofa.
+
+      Documentation about any script, variable, function or alias  can be 
+      retrieved by typing "ofa <token>", or something close.
+
+        - ofa                                # This documentation
+        - ofa <thing>                        # documentation on a token
+        - ofa list [<thing>]                 # list corresponding tokens
+        - ofa function|script|variable|alias # list functions, scripts, variables, aliases
+        - ofa map                            # Show Ofa File Resource Map
+        - ofa env                            # Show Resource Paths with current assignments
+        - ofa doc                            # Display this documention
+        - ver                                # Show Version Information
+
+      Note: in sripts, use the function "OfaHelp" rather than its alias "ofa" 
+            (some shells don't allow aliases in scripts).
+
+      Special Tokens 
+
+          ofa map
+      
+              Displays the ofa resource map file. 
+              This map indicates all file resources the ofa uses. 
+              It is a key resource for scripting and exposes the essence of ofa's structure.
+
+          ver
+
+              An alias for the OfaShowVersion function. 
+              "Version" information is ofa-specific and has nothing to do with any VCS. 
+              This function reveals more detail from volume level 3 upward. 
+              It can be used to check the current build, product, and whether anything was
+              modified since install.
+  
+      Hidden Things
+
+          Some things are hidden from the documentation system:
+          functions whose names start with an underscore "_". 
+          Those are "internal" functions that are of no interest to the end user.
+
+      Splash Screen
+
+         Each Graft Product can have a splash screen, which is found in 
+         $OFA_DOC/$OFA_GRAFT/OfaBonJour.$OFA_GRAFT.txt.
+
+         Properly maintained, it can serve as top-level documentation.
+         At the command line, the loader shows it when OFA_SPLASH <> 0
+
+         The aliases "hi" and "bj" also bring up the splash sceen. 
+

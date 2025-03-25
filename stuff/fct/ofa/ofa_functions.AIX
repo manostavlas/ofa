@@ -1,0 +1,10 @@
+function GetHostMemTotal {
+    typeset TOTAL_HOSTMEM=0
+    typeset UNIT__HOSTMEM=0
+    typeset DATA="$(lsattr -El sys0 | grep realmem)"
+    [[ ! -n "$DATA" ]] && BailOut "Cannot get memory data from host $HOSTNAME" && return 1
+    TOTAL_HOSTMEM="$(echo $DATA | awk '{print $2}')"
+    TOTAL_HOSTMEM=$(expr $TOTAL_HOSTMEM / 1024)
+    echo $TOTAL_HOSTMEM
+}
+

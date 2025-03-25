@@ -1,0 +1,189 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+
+function lll {
+  #
+  ##
+  ## name lll
+  ##
+  ## lists files as absolute paths
+  #
+    typeset tmpV
+    typeset Pwd=$(pwd)
+    typeset tmpVold=""
+
+    for tmpV in $*;do
+
+       [[ ! -r $tmpV ]] && echo "cannot read $tmpV" && return 1
+
+       # if not absolute path, pre-pend $PWD
+       #   
+          [[ $tmpV = "/"* ]] || tmpV=$Pwd/$tmpV  
+
+       while [[ $tmpV != $tmpVold ]];do
+          tmpVold=$tmpV
+
+          # process path
+          #   
+          tmpV=$( echo $tmpV |
+          sed '
+s@/\.$@@              # delete trailing /.
+s@/$@@                # delete trailing /
+s@/\./@/@g            # make /./ into /
+s@/[^/.][^/.]*/\.\.@@g  # make /x*/.. into /
+'
+         )   
+         done
+      echo $tmpV
+   done 
+}
+
+function _Grope {
+     typeset CNT=0;
+     while read LINE; do
+         let CNT+=1;
+         for TOK in $LINE;
+         do
+            [[ "$TOK" != *"$PAT"* ]] && continue;
+            printf "%s %-4d %s\n" "$FILE" "$CNT" "$TOK";
+        done;
+    done;
+}
+
+function Grope {
+  #
+  ## Name: Grope
+  ##
+  ## In:  pattern, file(s)/stdin
+  ## Out: results on stdout 
+  ## Ret: 0|22
+  ##
+  ## Synopsis: gropes for a pattern in a file and gets out only the token matched. 
+  ##
+  ## Usage:    Grope <pattern> <file>
+  ##
+  ## Description:
+  ##
+  ##    Like grep, but gets word-like chunks from files:
+  ##    - egrep's pattern on each whitespace separated token in file.
+  ##    - Shows file name, number and token.
+  ##
+  ## Limitation:
+  ##
+  ##    Grope cannot span spaces because it processes input word by word. 
+  ##    (no use in trying)
+  ##
+  #
+    typeset PAT="$1";
+    shift 1;
+    typeset FILES="$@";
+    if [[ -n "$FILES" ]]
+    then
+        for FILE in $FILES;
+        do
+            [[ ! -f $FILE ]] && OfaHelp "Grope" && return 22;
+            egrep "$PAT" $FILE | _Grope
+        done
+    else
+        FILE="[STDIN]"
+        _Grope
+    fi
+}
+
+
+function OfaScriptTemplate {
+  ##
+  ## Name: OfaScriptTemplate
+  ##
+  ## In:  n.a.
+  ## Out: n.a.
+  ## Ret: n.a.
+  ##
+  ## Synopsis: display a script template
+  ##
+  ## Usage: scrtem (alias for OfaScriptTemplate), redirect or paste into new file.
+  ##
+  ## Description:
+  ##
+  ##    Displays the standard header and some function calls to start a script.
+  ##
+  ## Workings:
+  ##    1.- Displays file $OFA_DOC/ofa/OfaScriptTemplate.head
+  ##    2.- Calls OfaDocTemplate for the documentation template
+  ##    3.- Displays file $OFA_DOC/ofa/OfaScriptTemplate.body
+  ##
+  ##
+    cat $OFA_DOC/ofa/OfaScriptTemplate.txt
+    return 0
+}
+
+function OfaDocTemplate {
+  ##
+  ## Name: OfaDocTemplate
+  ##
+  ## In:  template file
+  ## Out: cat file on stdout
+  ## Ret: 0
+  ##
+  ## Synopsis: display a template for uniform documentation.
+  ##
+  ## Usage: doctem (alias)
+  ##
+  ## Description:
+  ##
+  ##    Displays the standard documentation template for ofa.
+  ##
+  #
+    cat $OFA_DOC/ofa/OfaDocTemplate.txt
+    return 0
+}
+
+function OfaDocTemplateSql {
+  ##
+  ## Name: OfaDocTemplate
+  ##
+  ## In:  template file
+  ## Out: cat file on stdout
+  ## Ret: 0
+  ##
+  ## Synopsis: display a template for uniform documentation.
+  ##
+  ## Usage: doctem (alias)
+  ##
+  ## Description:
+  ##
+  ##    Displays the standard documentation template for ofa.
+  ##
+  #
+    cat $OFA_DOC/ofa/OfaDocTemplateSql.txt
+    return 0
+}
+
+function FindDuplicateFiles {
+  ##
+  ## Name: FindDuplicateFiles
+  ##
+  ## In:  files in directory
+  ## Out: listing on stdout
+  ## Ret: 0
+  ##
+  ## Synopsis: list count followed by basename, most occurences last
+  ##
+  ## Usage: dups [<dir>]
+  ##
+  ## Description:
+  ##
+  ##   lists duplicate file name alongside their count. 
+  ##
+    typeset _D="$1"
+    _D="${_D:-"."}"
+    ! CheckReadableDir _D && LogWarning "FindDuplicateFiles: failed directory check on \"$_D\"" && return 1
+
+    typeset _N="$2"
+    typeset _NAME_CLAUSE
+    [[ -n "$_N" ]] && _NAME_CLAUSE="-name '$_N'" || _NAME_CLAUSE=""
+    # # # echo "find $_D -type f $_NAME_CLAUSE 2>/dev/null| tr \"/\" \" \" | awk '{print \$NF}' | csort | sort -k1 -n | egrep -v \"^1[[:space:]]\""
+    eval find $_D -type f $_NAME_CLAUSE 2>/dev/null| tr "/" " " | awk '{print $NF}' | csort | sort -k1 -n | egrep -v "^1[[:space:]]" 
+    LogIt "(searched \"$_D\" for file name \"$_N\")"
+}

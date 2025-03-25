@@ -1,0 +1,19 @@
+  #                                                     
+  ## Name: <file or function name>                      
+  ##                                                    
+  ## In:  <input>                                       
+  ## Out: <output>                                      
+  ## Ret: <return values>                               
+  ##                                                    
+  ## Synopsis: <short description of purpose and effect>
+  ##                                                    
+  ## Usage: <"Usage" text>                              
+  ##                                                    
+  ## Description:                                       
+  ##                                                    
+  ##    <All useful explanatory text.>                  
+  ##                                                    
+  ## Workings:                                          
+  ##                                                    
+  ##    <Description of how it works>                   
+  #                                                     

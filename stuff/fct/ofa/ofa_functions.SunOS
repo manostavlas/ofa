@@ -1,0 +1,7 @@
+function GetHostMemTotal {
+    typeset DATA="$(prtconf 2>/dev/null| grep "Memory size")"
+    [[ ! -n "$DATA" ]] && BailOut "Cannot get memory data from host $HOSTNAME" && return 1
+    TOTAL_HOSTMEM="$(echo $DATA | awk '{print $3}')"
+    echo $TOTAL_HOSTMEM
+}
+

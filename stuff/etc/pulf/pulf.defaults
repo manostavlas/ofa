@@ -1,0 +1,18 @@
+  #
+  # default
+  #
+
+    OFA_MAIL_RCP_GOOD="mo nail" 
+    OFA_MAIL_RCP_BAD="mo nail" 
+
+    LOCAL_RESOURCE_FILE=$OFATAB
+    PUT_DIR=$OFA_ROOT/local/$OFA_TAG/etc/collected_targets
+
+    FILTER=$OFA_TAG
+    EXCEPT=${2:-"_no_such_keyword_"}
+
+    function aggfunc {
+         Usage "Pls. supply function \"aggfunc\" in $OFA_MY_ETC/$OFA_WHOSTALKING.$OFA_TAG"
+    }
+
+    return 0 

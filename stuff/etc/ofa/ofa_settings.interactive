@@ -1,0 +1,68 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+  # - variables
+  #
+    OFA_IA_FLG=1
+
+    EDITOR=vi
+    set -o vi 
+
+  # --------------- 
+  # - alias e.a.
+  #
+    alias bj='OfaBonJour'
+    alias bonjour='OfaBonJour'
+    alias cdpath='Path CDPATH'
+    alias doctem='OfaDocTemplate'
+    alias docsh='OfaDocTemplate'
+    alias docsql='OfaDocTemplateSql'
+    alias hi='OfaBonJour'
+    alias lll='LsFullPath'
+    alias logem='LogStdIn'
+    alias logit='LogIt'
+    alias logsta='LogStart'
+    alias logsto='LogStop'
+    alias loud='VolMax'
+    alias mute='VolMin'
+    alias ofacheck='OfaQuickCheckVerbose'
+    alias ofa='OfaHelpLess'
+    alias path='Path'
+    alias rp='RealPath'
+    alias scrtem='OfaScriptTemplate'
+    alias ssh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    alias vd='VolDn'
+    alias ver='OfaShowVersion'
+    alias vl='VolLvl'
+    alias vol='VolSet'
+    alias vu='VolUp'
+    alias mdp='MmDp'
+
+  # ---------------
+  # command line goodies
+  #
+    alias dups='FindDuplicateFiles'
+
+  # --------------- 
+  # - sho volume
+  #
+  # ASG  echo "Current Vol: $OFA_CONS_VOL" | CartRidge
+
+  #
+  # Shell Prompt
+  #
+    if [[ "$(uname -a)" = *"Linux"* ]]
+    then
+        PS1='${LOGNAME}@${HOSTNAME}:$(echo $PWD |sed "s@..*\(/[^/][^/]*/[^/][^/]*\)@-\1@")$ '
+    else
+        PS1="${LOGNAME}@${HOSTNAME}:-$ "
+    fi
+
+    OFA_SPLASH=1
+
+  # --------------- 
+  # - Flag interactive environment loaded
+  #
+    OFA_IA_SETTINGS_LOADED=1
+
+  return 0

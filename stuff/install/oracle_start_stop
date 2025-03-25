@@ -1,0 +1,57 @@
+#!/bin/bash
+# chkconfig: 35 99 01
+#
+# description: Starts and stops Oracle services
+# ------------------------------------------------------------------------------
+#
+# SYNOPSIS
+#  oracle_start_stop
+#
+# DESCRIPTION
+#  Oracle server control script
+#
+# INSTALL
+#
+#  To be added to chkconfig :
+#     cp oracle_start_stop.rc /etc/init.d/oracle_start_stop
+#     chown root:root /etc/init.d/oracle_start_stop
+#     chmod 755 /etc/init.d/
+#     chkconfig --add oracle_start_stop
+#     chkconfig oracle_start_stop on
+#
+# OPTION
+#  start        : start application
+#  stop         : stop application
+#
+# REVISION
+#
+#  $Revision: v1.00 $
+#  $Author: asg $
+#  $Date: 2017-01-14$
+#
+# ------------------------------------------------------------------------------
+StartTime=$(date +%Y:%m:%d_%H:%M:%S)
+start() {
+echo  "Oracle start, time: ${StartTime}    " >> /tmp/oracle_start_stop_script.out
+    su - dba -c "echo \"Starting Oracle services, time: ${StartTime}\" > /tmp/startORA.log 2>&1"
+    su - dba -c "nohup /ofa/local/oracle/bin/AllStartStop.sh start >> /tmp/startORA.log 2>&1"
+}
+
+stop() {
+    echo "Oracle stop time: ${StartTime}   "  >> /tmp/oracle_start_stop_script.out
+    su - dba -c "echo \"Shutting down Oracle services, time: ${StartTime}\"  > /tmp/stopORA.log 2>&1 "
+    su - dba -c "nohup /ofa/local/oracle/bin/AllStartStop.sh stop >> /tmp/stopORA.log 2>&1 "
+}
+
+case "$1" in
+        start)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+           *)
+        echo $"Usage: $0 {start|stop}"
+        exit 1
+    ;;
+esac

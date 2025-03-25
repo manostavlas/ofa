@@ -1,0 +1,81 @@
+
+    .--------------------------------------.
+    |  Interactive                         |
+    '--------------------------------------'
+
+  Three cases
+  -----------
+
+  There are three possible situations in a shell environment.
+  The ofa distinguishes between them through test functions:
+
+    - Interactive CLI       - IsInterActiveCLI
+    - Interactive (script)  - IsInterActive
+    - Background  (script)  - IsScript + IsInterActive
+
+    Some functions and scripts adapt their behaviour, e.g.: 
+
+      - The BailOut function does not "exit" outside a script. 
+      - The ofa_step.sh script does not attempt to prompt when not interactive. 
+        This makes it suitable for interactive and batch processing alike. 
+
+  Standard Functionality
+  ----------------------
+ 
+  Ofa loads some functions and settings and aliases when interactive. 
+
+    CDPATH
+
+      For one, the CDPATH is extended to navigate the ofa directory structure. 
+      This lets you navigate e.g. to the etc, bin or logs directories with short
+      syntax such as "cd bin", wherever you are. 
+
+    Documentation
+
+      In interactive mode, Documentation is invoked through the alias "ofa". 
+      This alias underscores the fact that "ofa" is its own documentation system. 
+      See the section "Documentation" for more. 
+
+  Other Functionality
+  -------------------
+
+      Interactive functionality is added depending on the graft product through
+      the relevant Resource paths. Type "ofa map" to see them.
+
+      General Documentation pertaining to the Graft Product is displayed with the 
+      top-level documentation obtained by typing "ofa" at the command prompt. 
+
+  Interactive vs. Script
+  ----------------------
+
+  It is worth noting that the ofa environment is not exported. 
+  A script will know nothing about your interactive ofa environment - it has no access to it. 
+
+  Therefore, the ofa environment loaded within a script is "completely fresh".  
+
+  There are few exceptions: 
+
+    OFA_CONS_VOL 
+
+      Console output volume is regulated by the variable OFA_CONS_VOL. 
+      This variable is always exported and not overridden by the loader. 
+      This allows you to pre-set the output volume for a script without modifying
+      its parameters, e.g.:
+
+        VolSet 3  # subsequent script becomes more verbose
+
+    OFA_GRAFT 
+
+        May be exported to preset and override the Graft Product "hardwired from $HOME"
+        esp. at the master, where you want to be able to switch products.
+        Note that this variable is not exported by default.
+
+  Profile
+  -------
+
+    To load ofa in interactlively, it is most adviseable to have this alias in your
+    Unix profile: 
+
+    alias ofa2=". ~/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc"
+    tty -s && echo "# \"ofa2\" loads ofa (v2) #"
+     

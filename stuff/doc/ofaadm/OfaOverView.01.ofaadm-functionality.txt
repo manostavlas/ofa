@@ -1,0 +1,107 @@
+
+    .--------------------------------------.
+    |  OFa Admin Environment               |
+    '--------------------------------------'
+
+  The ofa admin environment is a standard ofa environment running 
+  the "ofaadm" Graft Product.
+
+  Uses
+  ----
+
+  This environment is useful at the ofa master and distribution 
+  servers. Many times, those are one and the same. 
+
+  There are two main purposes: 
+
+    Managing the Master:
+   
+    - Maintain code and configuration resources for the base and core, 
+      as well as any graft products in use. 
+    - Generate the Deployment Package using the bundle_ofa.sh script.
+
+    Deploying ofa:
+
+    - Maintain the Ofatab.rc configuration file
+    - Run deployments using the deploy_ofa.sh script.
+
+  Specific Implementation
+  -----------------------
+
+    Architecture
+
+      The peculiar thing about this environment is that it
+       * is owned by the ofa "core" owner
+       * has its structure implanted not under "local", but "stuff"
+         (under $OFA_ROOT). 
+  
+      Notwithstanding, just like any other graft product, it needs
+      symlinks from "local" as well as $HOME:
+    
+        * /ofa/local/ofaadm -> ofa
+        * ~/ofaadm -> /ofa
+  
+    Product Switching
+
+      As you maintain products, you must be able to switch to them and load them. 
+
+      As a matter of fact, as long as you-re in the "ofaadm" graft product, resources
+      pertaining to the other graft products are abstracted from you. 
+      Every specific product environment only "sees" resources relevant to itself.
+      "ofaadm" is no exception. 
+
+      Therefore, an alias for each graft product is created to load its environment:
+
+        ofaadm       # loads ofaadm ofa environment
+        base         # loads ofa base environment
+        oracle       # loads ofa oracle environment
+        sybase       # loads ofa sybase environment
+        ...
+
+      The product list is taken from the resource file $OFA_ETC/ofaadm/ofa_reflist.graft. 
+      This same file is used by the bundle_ofa.sh script when generating the package.
+
+      Loading these environments enables you to navigate them, display documentation 
+      and run their scripts.
+      Note that when the underlying product is not present, e.g. Oracle or Sybase, you
+      might be be limited in testing scripts, for example. 
+      This should be done in sepearate environments anyway, as testing and deveopment
+      pollute a lot. Remember you are creating the package from this environment.
+
+  Maintaining the Master
+  ----------------------
+
+    Only Generic Resource Files
+
+      The Master being your source for deployment packages, only generic files should be
+      kept there. 
+    
+      As a rule, do not maintain files at the master that should be maintained locally. 
+      Overwriting of a local configuration file with an obsolete version from the master 
+      should be avoided at all costs.
+     
+      It is the responsibility of the maintainer to make sure of this.
+
+    Generating The Package
+
+      This is done via the bundle_ofa.sh script, which takes no arguments. 
+      Type "ofa bundle_ofa.sh" for details.
+    
+      Package Contents
+
+        There is only one deployment package. It contains all products in use.
+        There is one bundle per graft product, comprised of two archives:
+          - One for the Graft product
+          - One for the Base. 
+          The base archive always comprises the admin package, too (it is part of the core). 
+          It also comprises a current blueprint of the ofa master itself.
+        Bundle archives are extracted as-is at the target during deployment.
+        Consequently, the full ofa is contained in every target environment, but only
+        the relevant parts are installed.
+
+    Deploying ofa
+
+      This is done using the deploy_ofa.sh script.
+      Deployment process is driven by the Oratab.rc file. 
+      Type "ofa deploy_ofa.sh" for more.
+

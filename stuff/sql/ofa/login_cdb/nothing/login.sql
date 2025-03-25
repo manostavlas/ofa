@@ -1,0 +1,2 @@
+--REM This login.sql file does nothing
+--REM it is a dummy to avoid execution of any default login.sql

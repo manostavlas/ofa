@@ -1,0 +1,135 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+
+
+function OfaQuickCheckVerbose {
+  ##
+  ## Invoque OfaQuickCheck em mode verbeux.
+  ##
+  ## Usage: OfaQuickCheckVerbose [<SID>]
+  ## 
+  ##
+  #
+    VolMax
+    OfaQuickCheck $1
+    VolMin
+}
+
+function PullBundle {
+  #
+  ## 
+  ##
+  ##
+  # 
+  typeset RV=0
+
+  # Note: OFA_MASTER_SCPOPT is allowed null so it is not checked
+    ! CheckVar \
+        OFA_MASTER_HOST   \
+        OFA_MASTER_OWN    \
+        OFA_MASTER_ROOT   \
+        OFA_BUNDLE_NAME_FORMAT   \
+        OFA_VERSION_HIST_DIR  \
+    && echo  "Missing vars (see warnings)" \
+    && RV=21      \
+    && return $RV
+
+    [[ "$PWD" != "$OFA_BUNDLE_DIR" ]] && echo "(PullBundle): Must be in $OFA_BUNDLE_DIR" && RV=22
+    mkdir -p $OFA_VERSION_HIST_DIR
+    [[ ! -d "$OFA_VERSION_HIST_DIR" ]] && echo "(PullBundle): missing directory (\"$OFA_VERSION_HIST_DIR\")" && RV=23
+    mv -f $OFA_BUNDLE_NAME_FORMAT $OFA_VERSION_HIST_DIR/ 2>/dev/null
+
+  #
+  # scp: redirect 1>&2
+  #
+    scp $OFA_MASTER_SCPOPT $OFA_MASTER_OWN@$OFA_MASTER_HOST:"$OFA_MASTER_ROOT/$OFA_BUNDLE_NAME_FORMAT" . 1>&2
+    [[ $? -ne 0 ]] && echo "(PullBundle) failed scp" && RV=24
+
+    echo $(ls -1t $OFA_BUNDLE_NAME_FORMAT | head -1)
+
+    return $RV    
+}
+
+function ListComponentSubdirs {
+              sed "/^[${_SPACE_}]*$/d;/^[${_SPACE_}]*#/d;s/#.*//;s/:/ /g" $OFA_COMPONENTS_REFLIST \
+        | while read COMPONENT LOCATION FILE_FILTER RESOURCE_PATH \
+        ; do
+            echo $LOCATION
+        done | sort -u
+}
+
+function OfaTabIter {
+  #
+  ## Name: <file or function name>
+  ##
+  ## In:  <input>
+  ## Out: <output>
+  ## Ret: <return values>
+  ##
+  ## Synopsis: <short description of purpose and effect>
+  ##
+  ## Usage: <"Usage" text>
+  ##
+  ## Description:
+  ##
+  ##    <All useful explanatory text.>
+  ##
+  ## Workings:
+  ##
+  ##    <Description of how it works>
+  #
+    typeset FILTR
+    if [[ $# -eq 0 ]]
+    then
+        FILTR="."
+    else
+       FILTR="$(echo $@ | sed 's/  */|grep /g')"
+    fi
+    egrep -v "^ *#|^ *$" $OFATAB | grep $FILTR
+}
+
+function OfaTabParseLine {
+  #
+  ## Name: <file or function name>
+  ##
+  ## In:  <input>
+  ## Out: <output>
+  ## Ret: <return values>
+  ##
+  ## Synopsis: <short description of purpose and effect>
+  ##
+  ## Usage: <"Usage" text>
+  ##
+  ## Description:
+  ##
+  ##    <All useful explanatory text.>
+  ##
+  ## Workings:
+  ##
+  ##    <Description of how it works>
+  #
+     typeset LINE="$@"
+     SSH_PORT="$(echo  "$LINE" | egrep "^[${_DIGIT_}][${_DIGIT_}]*/" | sed "s@/.*@@")" 
+     [[ -n "$SSH_PORT" ]] && LINE="$(echo $LINE | sed "s@^[^/][^/]*/@@")" # delete pre-pended port number, if applicable
+     LINE="$(echo $LINE | sed "s/[^${_ALNUM_}/#][^${_ALNUM_}/#]*/ /g")"    # make single space field separators (usable with the cut command)
+     GRF_O="$(echo "$LINE" | cut -d " " -f1)"                              # owner
+     SRV_N="$(echo "$LINE" | cut -d " " -f2)"                              # server
+     OFA_R="$(echo "$LINE" | cut -d " " -f3)"                              # ofa root
+     OFA_O="$(echo "$LINE" | cut -d " " -f4)"                              # ofa owner
+     GRF_N="$(echo "$LINE" | cut -d " " -f5)"                              # Graft Product
+     MOD_S="$(echo "$LINE" | cut -d " " -f6)"                              # Segregation_mode
+     CMNTS="$(echo "$LINE" | cut -d " " -f7-)"                             # Comments
+  #
+  # .- Check vars "mute" 
+  # .- if not ok, check the same again verbose and fail
+  #
+     ! CheckVarMute GRF_O SRV_N OFA_R OFA_O GRF_N MOD_S CMNTS  \
+     && LogWarning "empty vars"  \
+     ! CheckVar     GRF_O SRV_N OFA_R OFA_O GRF_N MOD_S CMNTS  \
+     && return 11
+     return 0
+}
+
+return 0
+

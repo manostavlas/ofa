@@ -1,0 +1,23 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (me@shop.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+  # 
+  # This file should only contain assignments corresponding to the site_settings.sample file.
+  # 
+  # Note:
+  #  This file is never overwritten by any vendor release.
+  #  Only the site_settings.sample files is supplied from the bundle.
+  #
+    OFA_DOC_URL="http://onointra02/projects/ofa-hosted/wiki/Ofa_techdoc"
+    OFA_SCRIPT_GUIDE_URL="http://onointra02/projects/ofa-hosted/wiki/Ofa_Scripting_Guide"
+    OFA_MAIL_RCP_DFLT="me@shop.com" # Default mail recipients
+    OFA_MAIL_RCP_GOOD="me@shop.com" # Success mail recipients
+    OFA_MAIL_RCP_BAD="me@shop.com"  # Error   mail recipients
+
+    OFA_SCRIPT_AUTO_INIT=1
+
+    OFA_TRAP_HUP="MailLogReport     HUP"    # Action on hang-up
+    OFA_TRAP_INT="LogChecker        INT"    # Action on interrupt
+    OFA_TRAP_TRM="MailLogReport Terminated" # Action on hang-up
+    OFA_TRAP_XIT="MailLogReport"            # Action on exit
+

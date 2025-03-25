@@ -1,0 +1,63 @@
+# -----------------------------------------------------------------------------------------
+# Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+# -----------------------------------------------------------------------------------------
+##
+## File: ofa_resource.map
+##
+## This file maps resource files to resource paths. 
+## Existing files are added to the <RESPATH> variable in the order listed here.
+## File resources are accessed by the ofa via these Resource Paths.
+## Note: 
+##    The OFA_TAG is assigned "interactive" outside scripts, or made up from $1 otherwise. 
+##
+## Resource Paths: 
+##  - OFA_FUNX_PATH    : Functions 
+##  - OFA_SETT_PATH    : Environment Settings
+##  - OFA_MY_SETT_PATH : Script Settings
+##  - OFA_DRY3_PATH    : Directory-File-Key matching variable assignment
+##  - OFA_MY_DRY3_PATH : Ditto, at the script level.
+##
+## - key -------------------------------------------------------------------------------------------------------
+## RESPATH       : DIRECTORY PATH/FILE NAME                            : # LAYER, COMMENTS
+## -------------------------------------------------------------------------------------------------------------
+
+OFA_FUNX_PATH    : $OFA_FCT/ofa/ofa_functions.defaults                 : # core, vendor
+OFA_FUNX_PATH    : $OFA_FCT/ofa/ofa_functions.custom                   : # core, user@master
+OFA_FUNX_PATH    : $OFA_FCT/ofa/ofa_functions.$OSNAME                  : # core, vendor
+OFA_FUNX_PATH    : $OFA_FCT/ofa/ofa_functions.$OFA_TAG                 : # core, custom@local / vendor ("interactive")
+                                                                                   
+OFA_FUNX_PATH    : $OFA_FCT/$OFA_GRAFT/${OFA_GRAFT}_functions.defaults : # graft, vendor
+OFA_FUNX_PATH    : $OFA_FCT/$OFA_GRAFT/${OFA_GRAFT}_functions.custom   : # graft, custom@master
+OFA_FUNX_PATH    : $OFA_FCT/$OFA_GRAFT/${OFA_GRAFT}_functions.$OSNAME  : # graft, vendor
+OFA_FUNX_PATH    : $OFA_FCT/$OFA_GRAFT/${OFA_GRAFT}_functions.$HOSTNAME: # graft, custom@local
+OFA_FUNX_PATH    : $OFA_FCT/$OFA_GRAFT/${OFA_GRAFT}_functions.$USER    : # graft, user@local
+OFA_FUNX_PATH    : $OFA_FCT/$OFA_GRAFT/${OFA_GRAFT}_functions.$OFA_TAG : # graft, custom@local / vendor ("interactive")
+                                                                                   
+OFA_SETT_PATH    : $OFA_ETC/ofa/ofa_settings.defaults                  : # core, vendor
+OFA_SETT_PATH    : $OFA_ETC/ofa/ofa_settings.custom                    : # core, custom@master
+OFA_SETT_PATH    : $OFA_ETC/ofa/ofa_settings.$OSNAME                   : # core, vendor
+OFA_SETT_PATH    : $OFA_ETC/ofa/ofa_settings.$OFA_TAG                  : # core, custom@local / vendor ("interactive")
+
+OFA_SETT_PATH    : $OFA_ETC/$HOSTNAME/host_settings.$HOSTNAME          : # custom@local
+                                                                                   
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}_settings.defaults  : # graft, vendor
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}_settings.custom    : # graft, custom@master
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}_settings.$OSNAME   : # graft, vendor
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}_settings.$HOSTNAME : # graft, custom@local
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}_settings.$USER     : # graft, user@local
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}_settings.$OFA_TAG  : # graft, custom@local / vendor ("interactive")
+OFA_SETT_PATH    : $OFA_ETC/$OFA_GRAFT/${OFA_GRAFT}.rc                 : # graft, custom@master
+                                                                                   
+OFA_MY_SETT_PATH : $OFA_MY_ETC/$OFA_WHOSTALKING.defaults               : # script, script supplier@master (vendor/custom)
+OFA_MY_SETT_PATH : $OFA_MY_ETC/$OFA_WHOSTALKING.custom                 : # script, custom@master
+OFA_MY_SETT_PATH : $OFA_MY_ETC/$OFA_WHOSTALKING.$OFA_GRAFT             : # script, script supplier@master (vendor/custom)
+OFA_MY_SETT_PATH : $OFA_MY_ETC/$OFA_WHOSTALKING.$OSNAME                : # script, script supplier@master (vendor/custom)
+OFA_MY_SETT_PATH : $OFA_MY_ETC/$OFA_WHOSTALKING.$HOSTNAME              : # script, custom@local
+OFA_MY_SETT_PATH : $OFA_MY_ETC/$OFA_WHOSTALKING.$OFA_TAG               : # script, custom@local 
+                                                                                      
+# ---------------                                                                       
+# Dry3 Scan                                                                             
+# 
+OFA_DRY3_PATH    : $OFA_ETC/$HOSTNAME/dry3_${HOSTNAME}                 : # client, custom@local
+OFA_DRY3_PATH    : $OFA_ETC/ofa/dry3_custom                            : # core,   custom@master
+

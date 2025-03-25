@@ -1,0 +1,30 @@
+
+  .--------------------------------------.
+  |  Quick Summary                       |
+  '--------------------------------------'
+
+    "ofa" is an acronym for "optimal flexible architecture".
+    This term was originally coined by a reknowned database vendor, but
+    can be applied anywhere. 
+
+    This "ofa" can be configured to implement its users' flavor of 
+    Database OFA. 
+    However, it also implements a generic "ofa" at the Unix shell via 
+    a set of libraries and a handful conventions. 
+
+    It effectively constitutes a little framework that makes scripting
+    very easy: it takes care of log management, error checking, error 
+    reporting, mail, and even doumentation. 
+
+    It supports parameter files for scripts that do away with command
+    line switches and options handling.
+
+    It makes the Unix backend uniform and easy to manage all the while
+    allowing for maximum flexibility. 
+
+    It supports the notion of graft products, which are product-specific
+    modules -e.g. Oracle or Sybase -  that provide functionality within 
+    the "ofa". 
+
+    The ofa can easily and indefinitely be extended with such modules.
+

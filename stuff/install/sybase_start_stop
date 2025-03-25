@@ -1,0 +1,57 @@
+#!/bin/bash
+# chkconfig: 35 99 01
+# description: Starts and stops Sybase services
+# ------------------------------------------------------------------------------
+#
+# SYNOPSIS
+#  sybase_start_stop.rc
+#
+# DESCRIPTION
+#  Sybase SVC server control script
+#
+# INSTALL
+#
+#  To be added to chkconfig :
+#     cp sybase_start_stop.rc /etc/init.d/sybase_start_stop
+#     chown root:root /etc/init.d/sybase_start_stop
+#     chmod 755 /etc/init.d/
+#     chkconfig --add sybase_start_stop
+#     chkconfig sybase_start_stop on
+#
+# OPTION
+#  status       : status of the application
+#  start        : start application
+#  stop         : stop application
+#
+# REVISION
+#
+#  $Revision: 1022 $
+#  $Author: vat $
+#  $Date: 2013-11-12 07:56:06 +0100 (Tue, 12 Nov 2013) $
+#
+# ------------------------------------------------------------------------------
+start() {
+echo  "in start    " >> /tmp/script.out
+        echo "Starting Sybase services: "
+    su - dba -c "nohup /ofa/local/sybase/bin/AllStartStop.sh start > /tmp/startORA.log"
+}
+
+stop() {
+        echo "in stop >> /tmp/script.out"
+    echo "Shutting down Sybase services: "
+    su - dba -c "nohup /ofa/local/sybase/bin/AllStartStop.sh stop > /tmp/stopORA.log"
+}
+
+case "$1" in
+        start)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+           *)
+        echo $"Usage: $0 {start|stop}"
+        exit 1
+    ;;
+esac
+

@@ -1,0 +1,94 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+
+
+    [[ "$OFA_STD_SETTINGS_LOADED" = "1" ]]          \
+    && [[ $OFA_CONS_VOL -gt 1 ]]                    \
+    && LogIt "Ofa Standard Settings already loaded" \
+    && return
+
+  # ================================
+  # OFA_ 
+  # ----
+    OFA_CDPATH_TARGET=4
+    OFA_COMPLIANCE_SCORE=""                 # computed per DB
+    OFA_DF_COMMAND="df"                     # re-define in OS resource file
+    OFA_ENV_LABEL=${OFA_ENV_LABEL:-"[ENV?]"}
+    OFA_APP_LABEL=${OFA_APP_LABEL:-"[APP?]"}
+    OFA_DOC_URL=${OFA_DOC_URL:-"[OFA_DOC_URL?]"}
+    OFA_SCRIPT_GUIDE_URL=${OFA_SCRIPT_GUIDE_URL:-"[OFA_SCRIPT_GUIDE_URL?]"}
+    OFA_LOG_REQ=0                          # no logging requested
+    OFA_LOG_STATUS=-1                      # logging stopped
+    LOGFILE=${LOGFILE:-""}
+    OFA_IA_FLG=0                           # default: non-interactive
+    OFA_CONS_VOL=${OFA_CONS_VOL:-"1"}      # mode verbose normal
+    OFA_TMP_DIR=${TEMP:-"/tmp"}
+    OFA_SCRIPT_AUTO_INIT=${OFA_SCRIPT_AUTO_INIT:-"0"} # auto initialization & logging (disabled for backward comp.)
+    OFA_HELP_FLG=${OFA_HELP_FLG:-"0"}
+    OFA_LOAD_SEQ=""
+    OFA_CONCURR_EXCL="_n0thing_"
+    OFA_CONCURR_IGN=" tail | vi | vim | view | cat | grep | egrep "
+
+    OFA_VER_DIR=$OFA_DOC/ofa/VERSION
+    OFA_MAIL_RCP_DFLT="${OFA_MAIL_RCP_DFLT:-'[OFA_MAIL_RCP_DFLT?]'}" # Default mail recipients
+    OFA_MAIL_RCP_GOOD="${OFA_MAIL_RCP_GOOD:-'[OFA_MAIL_RCP_GOOD?]'}" # Success mail recipients
+    OFA_MAIL_RCP_BAD="${OFA_MAIL_RCP_BAD:-'[OFA_MAIL_RCP_BAD?]'}"    # Error mail recipients
+    OFA_MAIL_LOG_TAIL=200                          # number of log lines to append to mail (tail)
+    OFA_LOAD=$OFA_ETC/ofa/0fa_load.rc              #  .- load ofa
+    OFA_ERR="ERROR"                                # Standard Error Label
+    OFA_TRAP_HUP="${OFA_TRAP_HUP:-'LogChecker HUNG UP'}"     # Default Action on hang-up
+    OFA_TRAP_INT="ExitGently \"INT\""                        # Default Action on interrupt
+    OFA_TRAP_TRM="${OFA_TRAP_TRM:-'LogChecker TERMINATED'}"  # Default Action on hang-up
+    OFA_TRAP_XIT="${OFA_TRAP_XIT:-'MailLogReport'}"          # Default Action on exit
+
+    OFA_TMSP_PAT=$(Tmsp | sed "s/[${_DIGIT_}]/./g")
+    OFA_ERR_PAT="$OFA_ERR"                         # Matches error messages logged by ofa.
+    OFA_OS_ERR_PAT="ermission denied|ot found|o such|yntax error|o space left|llegal"
+    OFA_IGN_PAT="$OFA_TMSP_PAT \- \|"              # Default "ignorable errors" pattern 
+    OFA_WRN="Warn"                                 # Standard Warning Label
+    OFA_WRN_PAT="$OFA_WRN"                         # Default "warnings" matching pattern
+    OFA_WRN_PAT_IGN="$OFA_TMSP_PAT \- \|"          # Default "ignorable warnings" pattern
+    OFA_INF="Info"                                 # Standard Info Label
+    OFA_INF_PAT="$OFA_INF"                         # Default "info" matching pattern
+    OFA_SUC="SUCCESS"                              # Standard Success Label
+    OFA_STATUS_MANUAL=""                           # Force status.
+
+    OFA_PRGE_PATH_SIGT="/log|/diag"                # default purge path pattern 
+    OFA_PRGE_DAYS_BACK="62"                        # default min. age to purge files
+
+    OFA_VERSION_MD5_FILE=$OFA_VER_DIR/OFA.md5.stamp
+    OFA_VERSION_FILE=$OFA_VER_DIR/OFA.version
+    OFA_VERSION_TAG_FILE=$OFA_VER_DIR/OFA.version.tag
+    OFA_VERSION_LASTCHECK_FILE=$OFA_VER_DIR/OFA.lastchck
+    OFA_VERSION_HOSTNAME_FILE=$OFA_VER_DIR/OFA.hostname
+    OFA_VERSION_CHANGED_FILES=$OFA_VER_DIR/OFA.changed_files
+    OFA_VERSION_CHANGED_FILES_HIST=$OFA_VER_DIR/OFA.changed_files.log
+
+    [[ -s $OFA_VERSION_FILE           ]] && OFA_VERSION="$(cat $OFA_VERSION_FILE)"
+    [[ -s $OFA_VERSION_TAG_FILE       ]] && OFA_VERSION_TAG="$(cat $OFA_VERSION_TAG_FILE)"
+    [[ -s $OFA_VERSION_MD5_FILE       ]] && OFA_VERSION_MD5="$(cat $OFA_VERSION_MD5_FILE)"
+    [[ -s $OFA_VERSION_LASTCHECK_FILE ]] && OFA_VERSION_LASTCHECK="$(cat $OFA_VERSION_LASTCHECK_FILE)"
+    [[ -s $OFA_VERSION_HOSTNAME_FILE ]] && OFA_VERSION_HOSTNAME="$(cat $OFA_VERSION_HOSTNAME_FILE)"
+
+  # ================================
+  # PATHs
+  # ----
+    PATH=".:$OFA_BASE/bin:$OFA_BASE/bin/ofa:$PATH:$OFA_ROOT/local/base/bin"
+    for i in $(ls -ld $OFA_BASE/script/* 2>/dev/null | grep "^d" | awk '{print $NF}')
+    do
+        [[ -d "$i" ]] && [[ -r "$i" ]] && [[ -x "$i" ]] && CDPATH="$CDPATH:$i"
+    done
+    CDPATH=".:$OFA_BASE/script:$OFA_BASE:$OFA_BASE/..:$OFA_BASE/etc:$OFA_BASE/etc:$OFA_ROOT:$CDPATH"
+
+  # ================================
+  # Other environment
+  # ----
+    OFA_SSH_OPT="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  # ================================
+  # flag environment as loaded
+  # ----
+    OFA_STD_SETTINGS_LOADED=1
+
+    return 0

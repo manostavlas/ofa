@@ -1,0 +1,18 @@
+  # 
+  # bundle_ofa.defaults: settings for the bundle_ofa.sg script
+  #
+
+    TMSP="$(date "+%Y_%m_%d_%H%M%S")"
+    VERSTMP="$(date +%Y%m%d.%H.%M.%S)"
+
+    TMP_VERSION_MD5_FILE="$OFA_TMP_DIR/OFA.md5.$$"
+    TMP_FULLARCH_FOR_MD5_FILE="$OFA_TMP_DIR/ofa5full.TAR.$$"
+
+    EXCLUDE_PRE="VERSION|/logs/"
+    EXCLUDE_ARC="/logs"
+
+    BUNDLE_DIR="$OFA_BUNDLE_DIR"
+    COMPONENTS_REFLIST="$OFA_COMPONENTS_REFLIST"
+    GRAFT_REFLIST="$OFA_GRAFT_REFLIST"
+    VERSION_HIST_DIR="$OFA_VERSION_HIST_DIR"
+

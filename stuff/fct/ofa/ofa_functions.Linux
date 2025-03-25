@@ -1,0 +1,21 @@
+function GetHostMemTotal {
+    typeset TOTAL_HOSTMEM=0
+    typeset UNIT__HOSTMEM=0
+    typeset DATA="$(grep MemTotal /proc/meminfo)"
+    [[ ! -n "$DATA" ]] && BailOut "Cannot get memory data from host $HOSTNAME" && return 1
+    TOTAL_HOSTMEM="$(echo $DATA | awk '{print $2}')"
+    UNIT__HOSTMEM="$(echo $DATA | awk '{print $3}')"
+    case  $UNIT__HOSTMEM in
+       [Kk]*)
+             let TOTAL_HOSTMEM/=1024
+            ;;
+       [Mm]*)
+            ;;
+        *);;
+       [Gg]*)
+             let TOTAL_HOSTMEM\*=1024
+            ;;
+    esac
+    echo $TOTAL_HOSTMEM
+}
+

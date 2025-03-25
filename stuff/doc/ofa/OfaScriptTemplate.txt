@@ -1,0 +1,46 @@
+#!/bin/ksh
+#                                                     
+## Name: <file or function name>                      
+##                                                    
+## In:  <input>                                       
+## Out: <output>                                      
+## Ret: <return values>                               
+##                                                    
+## Synopsis: <short description of purpose and effect>
+##                                                    
+## Usage: <"Usage" text>                              
+##                                                    
+## Description:                                       
+##                                                    
+##    <All useful explanatory text.>                  
+##                                                    
+## Workings:                                          
+##                                                    
+##    <Description of how it works>                   
+#  ------------------------------------------------------------------------------                                                   
+  #
+  # load lib
+  #
+    . ~/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc || exit 22
+
+  #
+  # check arg1 $1
+  #
+  # $1 is usually there - mostly as a tag.
+  # To diplay Usage Text in its absence:
+    [[ ! -n $1 ]] && Usage "ERROR: Supply <arg1>" 
+
+  #
+  # Use:
+  #   BailOut to exit on error
+  #   LogIt &.a. for logging
+  #
+  # Control post-processing via:
+  #  - OFA_TRAP_HUP
+  #  - OFA_TRAP_INT
+  #  - OFA_TRAP_TRM
+  #  - OFA_TRAP_XIT
+  #
+  # Create parameter files in $OFA_ETC/<script short name>/<script short name>.defaults
+  #
+

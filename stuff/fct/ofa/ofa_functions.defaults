@@ -1,0 +1,5191 @@
+  # -----------------------------------------------------------------------------------------
+  # Copyright 2012-2013 OnoBase S.a.r.l. (ofa@onobase.com), FreeBSD copyright and disclaimer apply
+  # -----------------------------------------------------------------------------------------
+  #
+    [[ "$OFA_STD_FUNCTIONS_LOADED" = "1" ]]          \
+    && [[ $OFA_CONS_VOL -gt 1 ]]                     \
+    && LogIt "Ofa Standard Functions already loaded" \
+    && return
+
+
+  # ==============================================================================
+  # == functions: aux
+  # ==============================================================================
+
+function ScriptPath {
+   #
+   ## Name: ScriptPath
+   ##
+   ## In:  n.a.
+   ## Out: string
+   ## Ret: 0/1
+   ##
+   ## Synopsis:
+   ##  - In a script, echoes relative path of containing file.
+   ##  - Else, the os account name.
+   ##
+   ## Usage: ScriptPath
+   ##
+   #
+    VolDn
+    typeset _PROG="$(_ShowCaller)"
+    typeset _RV=$?
+    if [[ $_RV -ne 0 ]];then
+        echo "Failed_ScriptPath"
+    else
+        IsVerbose && LogIt "(ScriptPath got $_PROG from _ShowCaller)"
+        echo "$_PROG"
+    fi
+    VolUp
+    return $_RV
+}
+
+function WhichScript {
+   #
+   ## Name: WhichScript
+   ##
+   ## In:  <input>
+   ## Out: string
+   ## Ret: <return values>
+   ##
+   ## Synopsis:
+   ##    Echoes the "caller file"
+   ##  - If a script, its short name (truncated after ".")
+   ##  - Else, the os account name.
+   ##
+   ## Usage: WhichScript
+   ##
+   ## Workings:
+   ##    Calls basename on the output of ScriptPath,
+   ##
+   #
+    VolDn
+    typeset _PROG="$(ScriptPath)"
+    typeset _RV=$?
+    if [[ $_RV -ne 0 ]];then
+        echo "Failed_WhichScript"
+    else
+        IsVerbose && LogIt "(WhichScript got $_PROG from ScriptPath)"
+        basename "$_PROG"
+    fi
+    VolUp
+    return $_RV
+}
+# ==================================================================
+# Redhat Cluster function
+# ==================================================================
+PWait ()
+{
+i=$1
+while [[ $i -gt 0 ]];do
+echo -n -e "\rPlease wait.... |"
+sleep 0.15
+echo -n -e "\rPlease wait.... /"
+sleep 0.15
+echo -n -e "\rPlease wait.... -"
+sleep 0.15
+echo -n -e "\rPlease wait.... \\"
+sleep 0.15
+echo -n -e "\rPlease wait.... |"
+sleep 0.15
+echo -n -e "\rPlease wait.... -"
+sleep 0.15
+let i-=1
+done
+}
+
+function ClExist {
+  #
+  ##
+  ## Name: ClExist
+  ##
+  ## Synopsis: Check if Redhat Cluster are installed
+  ## exit 0 if installed
+  ## exit 1 in not installed 
+  ##
+  ## Usage: ClExist
+  ##
+  #
+
+    if [[ ! -r /etc/corosync/corosync.conf ]] || [[ ! -x /usr/sbin/pcs ]]
+    then
+      return 1 
+    fi
+}
+
+function ClName {
+  #
+  ##
+  ## Name: ClName
+  ##
+  ## Synopsis: Return the name of the Redhat Cluster 
+  ##           If not a redhat cluster NO output
+  ##
+  ## Usage: ClName
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    if [[ -r /etc/corosync/corosync.conf ]] && [[ -x /usr/sbin/pcs ]]
+    then 
+      pcs status | grep "Cluster name" | awk '{print $3}'
+    fi
+}
+
+
+function ClStatL {
+  #
+  ##
+  ## Name: ClStatL
+  ##
+  ## Synopsis: Return full status of the Redhat Cluster
+  ##
+  ## Usage: ClStatL
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  # ClRefresh
+  pcs status | sed 's/*/ /g'
+}
+
+function ClStatGrp {
+  #
+  ## Name: ClStatGrp
+  ##
+  ## Synopsis: Show cluster status for the Datbase resources. 
+  ##
+  ## Usage: ClName
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  ClRefresh grp-db-$(echo $ORACLE_SID | tr '[:upper:]' '[:lower:]')
+  ClStatL | grep -i $ORACLE_SID | grep -v "Resource Group:" | awk '{printf ("%-18s %-35s %-10s %-20s %-20s \n", $1, $2, $3, $4, $5)}' | grep -e heartbeat -e emagent | LogStdInEcho 
+}
+
+function ClStatGrpF {
+  #
+  ## Name: ClStatGrpF
+  ##
+  ## Synopsis: Show cluster status for the Datbase resources.
+  ##
+  ## Usage: ClNameF
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  ClStatL | grep -i $ORACLE_SID | grep -v "Resource Group:" | awk '{printf ("%-18s %-35s %-10s %-20s %-20s \n", $1, $2, $3, $4, $5)}' | grep -e heartbeat -e emagent | LogStdInEcho
+}
+
+
+function ClFail {
+  #
+  ## Name: ClFail
+  ##
+  ## Synopsis: Show resources in failed status.
+  ##
+  ## Usage: ClFail
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  ClStatL | grep -m10 -A100 Failed | sed '/Daemon Status:/,+10 d'
+}
+
+function ClMove {
+  #
+  ##
+  ## Name: ClMove
+  ##
+  ## Synopsis: Move the database resource from one node to the other node. 
+  ##
+  ## Usage: ClMove
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  
+  # Set groups to manage
+  ResourceGrp=$(pcs status resources | grep "Resource Group:" | grep $(echo $ORACLE_SID | tr '[:upper:]' '[:lower:]')| awk '{print $3}')
+  # echo "ResourceGrp: $ResourceGrp"
+  for i in $ResourceGrp
+  do
+	echo "Set resource group: $i to manage" 
+	pcs resource manage $i 
+  done
+
+  # Check status unmanage
+  ManStat=$(ClStatGrp | grep unmanaged)
+  if [[ ! -z $ManStat ]]
+  then
+	echo "Still resources with status: unmanaged"
+	ClStatGrpF | grep unmanaged
+	return 1
+  else
+	echo "All resources in manage...."
+  fi
+  
+  # Check for failed resources.
+  FailStat=$(ClFail)
+  if [[ ! -z $FailStat ]]
+  then
+        echo "Resources in failed...."
+        ClFail
+        # return 1
+  fi
+
+  # Check status running
+  StaStat=$(ClStatGrp | grep -e heartbeat -e emagent | awk '{print $3}' | grep -v Started)
+  if [[ ! -z $StaStat ]]
+  then
+	echo "Some resources are NOT in "Started" status"
+        ClStatGrp | grep -v Started
+        return 1
+  else 
+	echo "All group in Started"
+  fi
+
+
+  ClGrpName=$(echo "grp-db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+  ClGrpNameAg=$(echo "grp-emagent-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+  echo "Move resource group: ${ClGrpName}"
+
+  pcs resource move ${ClGrpName} lifetime=60S 
+  echo ""
+  
+  # Loop until move are done or timed out....
+  NumberLoop=20
+  LoopCount=1
+  while (( $LoopCount < $NumberLoop ))
+  do
+	# echo "LoopCount: $LoopCount"
+	let LoopCount=$LoopCount+1
+	StaStat=$(ClStatGrp | grep -e heartbeat -e emagent | grep -v Started)
+  	if [[ ! -z $StaStat ]]
+  	then
+        	echo "Waiting for resources to finish move....." 
+		pcs status | grep -i $ORACLE_SID | grep -v "Resource Group:" | awk '{printf ("%-18s %-35s %-10s %-20s %-20s \n", $1, $2, $3, $4, $5)}' | grep -e heartbeat -e emagent | grep -v Started
+        	# ClStatGrp | grep -v Started
+		echo "Please wait....."
+		# sleep 10
+        else
+                echo "All resources started."
+        	LoopCount=100
+  	fi
+  done
+
+        StaStat=$(ClStatGrpF | grep -e heartbeat -e emagent | grep -v Started)
+        if [[ ! -z $StaStat ]]
+        then
+		echo "ERROR move resource..."
+		return 1
+        else
+                NodeName=$(ClStatGrpF | head -1 | awk '{print $4}')
+	        echo ""	
+	        echo ""	
+		echo "Move done..... "
+		echo "Running on node: ${NodeName}"
+		echo ""
+		echo "Clear: ${ClGrpName}" 
+		pcs resource clear ${ClGrpName}
+		echo "Clear: ${ClGrpNameAg}" 
+		pcs resource clear ${ClGrpNameAg}
+		echo ""
+		ClStatGrpF
+                echo ""
+        fi
+  
+}
+
+function ClUnManDbGrp {
+  #
+  ##
+  ## Name: ClUnManDbGrp
+  ##
+  ## Synopsis: Switch resource group to unmanage.
+  ##
+  ## Usage: ClUnManDbGrp
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClGrpName=$(echo "grp-db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Unmanage group: ${ClGrpName}"
+    pcs resource unmanage ${ClGrpName}
+    ClStatGrpF
+
+}
+function ClManDbGrp {
+  #
+  ##
+  ## Name: ClManDbGrp
+  ##
+  ## Synopsis: Switch resource group to manage.
+  ##
+  ## Usage: ClManDbGrp
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClGrpName=$(echo "grp-db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Manage group: ${ClGrpName}"
+    pcs resource manage ${ClGrpName}
+}
+
+function ClRefreshOld {
+  #
+  ##
+  ## Name: ClRefresh
+  ##
+  ## Synopsis: Refresh the status of the resource 
+  ##
+  ## Usage: ClRefresh [RESOURCE_NAME]
+  ##
+  #
+  ResourceName=$1
+   if [[ -z $ResourceName ]]
+   then
+      echo "Resource name missing"
+      return 1
+   fi
+  echo "Refresh resource: $ResourceName"
+  pcs resource refresh $ResourceName
+  echo "Please wait...."
+  sleep 15
+  # ClStatGrp | grep -w $(echo ${ORACLE_SID} |  tr '[:upper:]' '[:lower:]') 
+  # ClStatGrp
+}
+
+function ClRefresh {
+  #
+  ##
+  ## Name: ClRefresh
+  ##
+  ## Synopsis: Refresh the status of the resource
+  ##
+  ## Usage: ClRefresh [RESOURCE_NAME]
+  ##
+  #
+  ResourceName=$1
+   if [[ -z $ResourceName ]]
+   then
+      echo "Resource name missing"
+      return 1
+   fi
+  NodeName=$(pcs status | grep vip- | grep -w $(echo ${ORACLE_SID} |  tr '[:upper:]' '[:lower:]') | awk '{print $4}')
+  echo "Refresh resource: $ResourceName on node: $NodeName" >&2
+  crm_resource --refresh --resource ${ResourceName} --node ${NodeName} --force > /dev/null 2>&1
+  # pcs resource refresh $ResourceName
+  echo "Please wait...."
+  sleep 5
+  # ClStatGrp | grep -w $(echo ${ORACLE_SID} |  tr '[:upper:]' '[:lower:]')
+  # ClStatGrp
+}
+
+
+function ClUnManDb {
+  #
+  ##
+  ## Name: ClUnManDb
+  ##
+  ## Synopsis: Switch resource group to unmanage.
+  ##
+  ## Usage: ClUnManDb
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClDbName=$(echo "db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Unmanage DB resource: ${ClDbName}"
+    pcs resource unmanage ${ClDbName}
+    ClStatGrpF
+
+}
+function ClManDb {
+  #
+  ##
+  ## Name: ClManDb
+  ##
+  ## Synopsis: Switch resource group to manage.
+  ##
+  ## Usage: ClManDb
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClDbName=$(echo "db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Manage DB resource: ${ClDbName}"
+    pcs resource manage ${ClDbName}
+    ClStatGrp
+  # Check status
+  NumberLoop=20
+  LoopCount=1
+  while (( $LoopCount < $NumberLoop ))
+  do
+        # echo "LoopCount: $LoopCount"
+        let LoopCount=$LoopCount+1
+        StaStat=$(ClStatGrp | grep ${ClDbName} | grep heartbeat | grep -v Started)
+        if [[ ! -z $StaStat ]]
+        then
+                echo "Waiting for resources: ${ClDbName} to start."
+                pcs status | grep -i $ORACLE_SID | grep -v "Resource Group:" | awk '{printf ("%-18s %-35s %-10s %-20s %-20s \n", $1, $2, $3, $4, $5)}' | grep ${ClDbName} | grep heartbeat | grep -v Started
+                # ClStatGrp | grep -v Started
+                echo "Please wait....."
+                # sleep 10
+        else
+                echo "${ClDbName} started."
+                LoopCount=100
+        fi
+  done
+
+  StaStat=$(pcs status | grep ${ClDbName} | grep heartbeat | grep Started)
+  if [[ -z $StaStat ]]
+  then 
+     echo "Resource: ${ClDbName} can't start."
+     return 1
+  fi
+
+}
+
+function ClDisDb {
+  #
+  ##
+  ## Name: ClDisDb
+  ##
+  ## Synopsis: Switch resource group to unmanage.
+  ##
+  ## Usage: ClDisDb
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClDbName=$(echo "db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Disable DB resource: ${ClDbName}"
+    pcs resource disable ${ClDbName}
+    ClStatGrp
+}
+
+function ClEnDb {
+  #
+  ##
+  ## Name: ClEnDb
+  ##
+  ## Synopsis: Switch resource group to unmanage.
+  ##
+  ## Usage: ClEnDb
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClDbName=$(echo "db-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "enable DB resource: ${ClDbName}"
+    pcs resource enable ${ClDbName}
+    ClStatGrp
+}
+
+function ClUnManAg {
+  #
+  ##
+  ## Name: ClUnManAg
+  ##
+  ## Synopsis: Switch resource group to unmanage.
+  ##
+  ## Usage: ClUnManAg
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClGrpName=$(echo "grp-emagent-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Unmanage group: ${ClGrpName}"
+    pcs resource unmanage ${ClGrpName}
+    ClStatGrpF
+}
+function ClManAg {
+  #
+  ##
+  ## Name: ClManAg
+  ##
+  ## Synopsis: Switch resource group to manage.
+  ##
+  ## Usage: ClManAg
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+    ClGrpName=$(echo "grp-emagent-${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+    echo "Manage group: ${ClGrpName}"
+    pcs resource manage ${ClGrpName}
+}
+function ClUnManLsn {
+  #
+  ##
+  ## Name: ClUnManLsn
+  ##
+  ## Synopsis: Switch resource group to unmanage.
+  ##
+  ## Usage: ClUnManLsn
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  Parameter1=$1
+  MGWListener=$(echo $Parameter1 | grep -i mgw)
+  Listener=$(echo $Parameter1 | grep -v -i mgw)
+
+  echo "MGWListener: *$MGWListener*"
+  echo "Listener: *$Listener*"
+  
+  SidLow=$(echo "${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+
+  if [[ ! -z $MGWListener ]]
+  then
+        LsnResources=$(ClStatGrp | grep -v Cleaned | awk '{print $1}' | grep -x "lsn-${SidLow}_gw" | sed ':a;N;$!ba;s/\n/ /g')
+	echo "MGW LsnResources: $LsnResources"
+	echo "MGW"
+  elif [[ ! -z $Listener ]]
+  then
+        # LsnResources=$(ClStatGrp | grep -v Cleaned | grep -x "lsn-${SidLow}"  | awk '{print $1}' | sed ':a;N;$!ba;s/\n/ /g')
+	LsnResources=$(ClStatGrp | grep -v Cleaned | awk '{print $1}' | grep -x "lsn-${SidLow}"  | sed ':a;N;$!ba;s/\n/ /g')
+	echo "None MGW LsnResources: $LsnResources"
+	echo "None MGW"
+  else
+        LsnResources=$(ClStatGrp | grep -v Cleaned | grep -e lsn-${SidLow} -e lsn-${SidLow}_gw | awk '{print $1}' | sed ':a;N;$!ba;s/\n/ /g')
+  fi
+
+  # LsnResources=$(ClStatGrp | grep -v Cleaned | grep -e lsn-${SidLow} -e lsn-${SidLow}_gw | awk '{print $1}' | sed ':a;N;$!ba;s/\n/ /g')
+  # LsnResources="$(ClStatGrp | grep -v Cleaned | grep -w lsn-${SidLow} | awk '{print $1}') $(ClStatGrpF | grep -v Cleaned | grep lsn-${SidLow}_ | awk '{print $1}')"
+  # LsnResources=$(ClStatGrp | grep -v Cleaned | grep -w lsn-${SidLow} | awk '{print $1}')
+  echo "LsnResources: $LsnResources"
+
+    for i in $LsnResources
+    do
+    	echo "Set listener resource: ${i} to unmanage."
+    	pcs resource unmanage ${i}
+    done 
+    ClStatGrpF
+}
+function ClManLsn {
+  #
+  ##
+  ## Name: ClManLsn
+  ##
+  ## Synopsis: Switch resource group to manage.
+  ##
+  ## Usage: ClManLsn
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  Parameter1=$1
+  MGWListener=$(echo $Parameter1 | grep -i mgw) 
+  Listener=$(echo $Parameter1 | grep -v -i mgw)
+
+  echo "MGWListener: $MGWListener"
+  echo "Listener: $Listener"
+  SidLow=$(echo "${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+  echo "Database Name: $SidLow"
+  
+  if [[ ! -z $MGWListener ]]
+  then
+	LsnResources=$(ClStatGrp | grep -v Cleaned | awk '{print $1}' | grep -x lsn-${SidLow}_gw | sed ':a;N;$!ba;s/\n/ /g')
+	echo "MGW LsnResources: $LsnResources"
+  elif [[ ! -z $Listener ]]
+  then
+        LsnResources=$(ClStatGrp | grep -v Cleaned | awk '{print $1}' | grep -x lsn-${SidLow}  | sed ':a;N;$!ba;s/\n/ /g')
+	echo "None MGW LsnResources: $LsnResources"
+  else
+	LsnResources=$(ClStatGrp | grep -v Cleaned | grep -e lsn-${SidLow} -e lsn-${SidLow}_gw | awk '{print $1}' | sed ':a;N;$!ba;s/\n/ /g')
+  fi
+
+  # LsnResources=$(ClStatGrp | grep -v Cleaned | grep -e lsn-${SidLow} -e lsn-${SidLow}_gw | awk '{print $1}' | sed ':a;N;$!ba;s/\n/ /g')
+  # LsnResources="$(ClStatGrp | grep -v Cleaned | grep -w lsn-${SidLow} | awk '{print $1}') $(ClStatGrpF | grep -v Cleaned | grep lsn-${SidLow}_ | awk '{print $1}')"
+  echo "LsnResources: $LsnResources"
+ 
+    for i in $LsnResources
+    do
+        echo "Set listener resource: ${i} to manage"
+        pcs resource manage ${i}
+	  #------------ Check status ------------
+	  NumberLoop=20
+	  LoopCount=1
+	  while (( $LoopCount < $NumberLoop ))
+	  do
+	        # echo "LoopCount: $LoopCount"
+	        let LoopCount=$LoopCount+1
+	        StaStat=$(ClStatGrp | grep -w ${i} | grep heartbeat | grep -v Started)
+	        if [[ ! -z $StaStat ]]
+	        then
+	                echo "Waiting for resources: ${i} to start."
+	                pcs status | grep -i ${ORACLE_SID} | grep -v "Resource Group:" | awk '{printf ("%-18s %-35s %-10s %-20s %-20s \n", $1, $2, $3, $4, $5)}' | grep -w ${i} | grep heartbeat | grep -v Started
+	                # pcs status | grep -i ${ORACLE_SID} | grep -v "Resource Group:" | awk '{printf ("%-18s %-35s %-10s %-20s %-20s \n", $1, $2, $3, $4, $5)}' | grep lsn-${SidLow} | grep heartbeat | grep -v Started
+	                # ClStatGrp | grep -v Started
+	                echo "Please wait....."
+	                # sleep 10
+	        else
+	                echo "${i} started."
+	                LoopCount=100
+	        fi
+	  done
+
+	  # StaStat=$(pcs status | grep ${i} | grep heartbeat | grep Started)
+	  StaStat=$(pcs status | grep -v Cleaned | grep lsn-${SidLow} | grep heartbeat | grep Started)
+	  if [[ -z $StaStat ]]
+	  then
+	     echo "Resource: ${i} can't start."
+	     return 1
+	  fi
+
+    done
+    ClStatGrp
+
+}
+
+function ClDisLsn {
+  #
+  ##
+  ## Name: ClDisLsn
+  ##
+  ## Synopsis: Disable resource: listener(s).
+  ##
+  ## Usage: ClDisLsn
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  SidLow=$(echo "${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+  # LsnResources=$(ClStatGrp | grep -v Cleaned | grep lsn-${SidLow} | awk '{print $1}')
+  LsnResources="$(ClStatGrp | grep -v Cleaned | grep -w lsn-${SidLow} | awk '{print $1}') $(ClStatGrpF | grep -v Cleaned | grep lsn-${SidLow}_ | awk '{print $1}')"
+
+    for i in $LsnResources
+    do
+        echo "Disable resource: ${i}"
+        pcs resource disable ${i}
+    done
+    ClStatGrp
+}
+
+function ClEnLsn {
+  #
+  ##
+  ## Name: ClEnLsn
+  ##
+  ## Synopsis: Enable resource: listener(s).
+  ##
+  ## Usage: ClEnLsn
+  ##
+  #
+  [[ $(ClExist ; echo $?) == 1 ]] && echo "Not A REDHAT cluster" && return 1
+  SidLow=$(echo "${ORACLE_SID}" |  tr '[:upper:]' '[:lower:]')
+  # LsnResources=$(ClStatGrp | grep -v Cleaned | grep lsn-${SidLow} | awk '{print $1}')
+  LsnResources="$(ClStatGrp | grep -v Cleaned | grep -w lsn-${SidLow} | awk '{print $1}') $(ClStatGrpF | grep -v Cleaned | grep lsn-${SidLow}_ | awk '{print $1}')"
+    for i in $LsnResources
+    do
+        echo "Enable resource: ${i}"
+        pcs resource enable ${i}
+    done
+    ClStatGrp
+}
+
+
+# ==================================================================
+function WhosTalking {
+   #
+   ## Name: WhosTalking
+   ##
+   ## In:  <input>
+   ## Out: string
+   ## Ret: <return values>
+   ##
+   ## Synopsis: echoes the "caller name"
+   ##  - if a script, its short name (truncated after ".")
+   ##  - else, the os account name.
+   ##
+   ## Usage: WhosTalking
+   ##
+   ## Workings:
+   ##    Calls _ShowCaller, which does a ps followed by a sed expression, which
+   ##    echoes the caller name and returns 0 if successful, else returns 1
+   ##
+   #
+    VolDn 1001
+    typeset _PROG="$(WhichScript)"
+    typeset _RV=$?
+    if [[ $_RV -ne 0 ]];then
+        echo "Failed_WhosTalking"
+    else
+        IsVerbose && LogIt "(WhosTalking got $_PROG from WhichScript)"
+        echo "$_PROG" | sed 's@\..*@@g'
+    fi
+    VolUp 1001
+    return $_RV
+}
+
+# ----------------------------------------
+# some functions are conditionally defined
+# ----------------------------------------
+
+type less >/dev/null 2>/dev/null
+if [[ $? -eq 0 ]]
+then
+   function Less {
+       less
+   }
+else
+   function Less {
+       more
+   }
+fi
+
+type more >/dev/null 2>/dev/null
+if [[ $? -eq 0 ]]
+then
+   function More {
+       more
+   }
+else
+   function More {
+       less
+   }
+fi
+
+function FileTime {
+    echo $(ls -l "$1" | awk '{$1="";$2="";$3="";$4="";$5="";$NF="";print}')
+}
+
+function Dry3 {
+  #
+  ## Name: Dry3
+  ##
+  ## In: Directory Structure containing Text Files 
+  ## Out: variable assignment(s)
+  ## Ret: 0/1
+  ##
+  ## Purpose:  populate variables using ofa-style "dynamic scarce scan"
+  ##
+  ## Synopsis: Populate empty variables or create them (but never overwrite existing ones)  
+  ##           by matching arguments in files found in the sub-directories found in a directory.
+  ##           The directory list is encapsulated in a list of variables whose names are supplied
+  ##           as a colon-separated list contained in the variable OFA_SCANTREE_POINT 
+  ## 
+  ## Usage: VAR1="/path/to/structure_1"
+  ##        VAR2="/path/to/structure_2"
+  ##        ...
+  ##        VARn="/path/to/structure_n"
+  ##        OFA_SCANTREE_POINT="VAR1[:VAR2[..[:VARn]]]"
+  ##        Dry3 $@
+  ##    
+  ## Example: 
+  ##      Match: "InventDB01" in file /path/from/VAR1/OFA_APP_LABEL/AssemblyControl
+  ##      Effect: OFA_APP_LABEL="AssemblyControl"
+  ##
+  ## Workings:
+  ##
+  ##  - Variable names are extracted from $OFA_SCANTREE_POINT and interpoated via eval.
+  ##    Their contents are paths end points are parent to specially formatted directory 
+  ##    structures: 
+  ##
+  ##    ./Directory/File-containing-tokens 
+  ##       VARIABLE=NAME
+  ## 
+  ##  - Names of Files are their possible values.
+  ##  - Tokens in Files are matched against Args in $@ (argv)
+  ##  - Assigment occurs when a token can be matched in a file.
+  ##
+  ##  - The candidate variable is processed only if void or non-existent.
+  ##    Otherwise, it is regarded as populated and therefore skipped.
+  ##     
+  ##  - Arguments are split on non-alphanumeric characters, which are discarded. 
+  ##    Example: 
+  ##       "dba@hostxyz001:[INVDB01]" would become "dba hostxyz001 INVDB01"
+  ##       Each of the tokens thus obtained would then be matched in succession. 
+  ##  - Only a full exact match counts (in the file, tokens must be "alone" on their line)
+  ##  - Matching is case sensitive.
+  ##  - Only the last match is retained.
+  ##    (that's because the degree of detail is assumed to increases from left to right,
+  ##     so a later match would be more accurate than an earlier one). 
+  ##  - Comments in the file work as expected (# is not alphanumeric, so it cannot be matched)
+  ##    However, comments must be standalone - just like tokens - on their line. 
+  ##
+  #
+    VolDn
+    typeset FQDP
+    typeset DIR
+    typeset VAR_N
+    OFA_DRY3_EXPR="$OFA_TAG|$HOSTNAME|$OFA_WHOSTALKING|$OFA_WHICHSCRIPT"
+    OFA_DRY3_EXPR="$(echo $OFA_DRY3_EXPR | sed 's@|\.|@@;s@^\.|@@;s@|\.$@@')"
+    LogIt "Dry3 with \"$(eval echo \$$OFA_SCANTREE_POINT)\" \"$OFA_DRY3_EXPR\""
+    for FQDP in $(eval echo \$$OFA_SCANTREE_POINT)
+    do
+        [[ ! -n "$FQDP" ]] && continue
+        [[ ! -d "$FQDP" ]] && continue
+        IsVerbose && LogIt "Scan $FQDP"
+      #
+      # Cycle through subdirectories.
+      # Each represents (by its name) a candidate variable to populate.
+      #
+        for DIR in $(ls -ld $FQDP/* 2>/dev/null | egrep "^d" | egrep -v "\." | awk '{print $NF}')
+        do
+            VAR_N=$(basename $DIR)
+          #
+          # Check whether the variable under inspection is
+          # empty/non-existent, or whether its value contains a question mark (?). 
+          # A question mark is assumed to be part of an undetermined default value, e.g. "[App?]"
+          # Process only if either one condition is met. 
+          #
+            IsVerbose && LogIt "Candidate variable name from directory name: $VAR_N"
+            if [[ ! -n "$(eval echo \$$VAR_N)"    ]] \
+            || [[ "$(eval echo \$$VAR_N)" = *"?"* ]]
+            then
+                IsVerbose && LogIt "Processing $VAR_N"
+              #
+              # Each file name represents a candidate value for the current variable (in $VAR_N)
+              # When a match is made, the variable is populated with the file name. 
+              #
+                _FILE_N="$(
+                    egrep -l "$OFA_DRY3_EXPR" $(
+                        ls -ld $DIR/* nosuchfile 2>/dev/null \
+                        | egrep -v "^d|\." \
+                        | awk '{print $NF}'
+                    )   \
+                    | head -1 
+                )"
+                if [[ -n $_FILE_N ]]
+                then
+                    eval $VAR_N=$(basename $_FILE_N)
+                    LogIt "$(eval echo $VAR_N == \$$VAR_N)"
+                fi
+            else
+                LogIt "Skipping $VAR_N as it wasn't empty" 
+            fi
+
+        done
+    done
+    VolUp
+}
+
+  function LoadSiteSettings {
+    #
+    ## Name: LoadSiteSettings
+    ##
+    ## In:  Path-style variable
+    ## Out: variable assignment
+    ## Ret: 0/1
+    ##
+    ## Synopsis: Populate SITE/HOST-specific variables using "Dry3" technique
+    ##
+    ## Usage: LoadSiteSettings $@
+    ##
+    ## Description:
+    ##
+    ##    Call Dry3() on path contained in OFA_LOAD_SITE_SETTINGS_PATH
+    ##
+    ## See also: Dry3
+    ##
+    #
+      VolDn 2
+      LogIt "Load Site Settings (LoadSiteSettings) begin:"
+      OFA_SCANTREE_POINT="OFA_DRY3_PATH"
+      Dry3 $@
+      LogIt "Load Site Settings (LoadSiteSettings) end"
+      VolUp 2
+  }
+
+  function Path {
+    #
+    ## Name: Path
+    ##
+    ## In:  [<args>]
+    ## Out: list on stdout
+    ## Ret: n.a.
+    ##
+    ## Synopsis: 
+    ##    - lists paths seperated by newlines
+    ##    - with "list", lists relevant contents, too
+    ##
+    ## Usage: Path "<VARIABLE>" ["list"|"LIST"]
+    ##
+    ## Examples::
+    ##
+    ##   Paths only:
+    ##   ===========
+    ##   Path                # lists members of PATH
+    ##   Path PATH           # same as above
+    ##   Path CDPATH         # lists members of CDPATH
+    ##   Path SQLPATH        # lists members of SQLPATH
+    ##
+    ##   Paths relevant contents:
+    ##   ========================
+    ##   Path [PATH]  list   # lists all attainable binaries (limited* output)
+    ##   Path SQLPATH list   # lists all "sql"- files        (limited* output)
+    ##   Path CDPATH  list   # lists all direcories att.     (limited* output)
+    ##   Path [PATH]  LIST   # lists all attainable binaries (full length** output)
+    ##   Path SQLPATH LIST   # lists all "sql"- files        (full length** output)
+    ##   Path CDPATH  LIST   # lists all direcories att.     (full length** output)
+    ##   (*  12 items)
+    ##   (** 1000 items)
+    ##
+    ## Workings:
+    ##
+    ##    <Description of how it works>
+    #
+
+      typeset _PName=${1:-"PATH"}
+      typeset _List=$2
+      [[ "$_PName" = "list" ]] || [[ "$_PName" = "LIST" ]] &&  _List="$_PName" && _PName="PATH" 
+      if [[ $_List = "list" ]] || [[ $_List = "LIST" ]]
+      then
+          typeset dir
+          typeset _dir
+          typeset _MAXCNT=0
+          typeset _CNT=0
+          typeset _MORE=0
+          [[ "$_List" = "list" ]] && _MAXCNT=12 || _MAXCNT=1000
+          for dir in $(Path $_PName)
+          do
+              _dir="$(echo $dir|sed 's/./ /g')"
+              echo "$dir/"
+              case $_PName in 
+                PATH)
+                     _CNT=$(ls -ld $dir/* 2>/dev/null|egrep -v "^[dl]" | egrep "^...x|^......x|.........x"|awk 'END{print NR}') # */
+                     ls -ld $dir/* 2>/dev/null|egrep -v "^[dl]" | egrep "^...x|^......x|.........x"|awk '{print $NF}'|sed "s;$dir/;$_dir;"|head -$_MAXCNT; # */
+                     ;;
+             SQLPATH)
+                     _CNT=$(ls -ld $dir/* 2>/dev/null|grep -v ^d | egrep -i "sql$"|awk 'END{print NR}') # */
+                     ls -ld $dir/* 2>/dev/null|grep -v ^d | egrep -i "sql$"|awk '{print $NF}'|sed "s;$dir/;$_dir;"|head -$_MAXCNT; # */
+                     ;;
+              CDPATH)
+                     _CNT=$(ls -ld $dir/* 2>/dev/null|grep "^ *d"|awk 'END{print NR}') # */
+                     ls -ld $dir/* 2>/dev/null|grep "^ *d"|awk '{print $NF}'|sed "s;$dir/;$_dir;"|head -$_MAXCNT; # */
+                     ;;
+                   *)
+                     BailOut "Cannot list: \"$_PName\""
+                     return 123;
+                     ;;
+              esac
+              [[ $_CNT -gt $_MAXCNT ]] && let _MORE="$_CNT - $_MAXCNT" && echo "   (... $_MORE more)"
+          done
+      else
+          eval echo \$$_PName | tr ":" " 
+  " | tr " " "
+  "
+      fi | sed "/^[${_SPACE_}]*$/d"
+  }
+
+  function Paths {
+    ##
+    ## Name: Paths
+    ##
+    ## In:  Variable Names
+    ## Out: Multi-line on stdout
+    ## Ret: n.a.
+    ##
+    ## Synopsis: Calls "Path" on each argument
+    ##
+    ## Usage: Paths <Path Variable Name> [<...>]
+    ##
+    ## Description:
+    ##
+    ##    Arbitrary-argument wrapper around the "Path" function.
+    ##  
+    #
+      for i in $@
+      do
+          Path $i
+      done | sed "/^[${_SPACE_}]*$/d"
+  }
+
+  function ReadOverRideAssignmentsUpCase {
+    #
+    ## Name: ReadOverRideAssignmentsUpCase
+    ##
+    ## In:  string with "name=value"-pairs
+    ## Out: variable assignments
+    ## Ret: 0
+    ##
+    ## Synopsis: 
+    ##     invokes ReadOverRideAssignments with the upcase option
+    ##
+    ## Usage: ReadOverRideAssignmentsUpCase $@
+    ##
+    ## See also: ReadOverRideAssignments
+    ##
+    #
+      _OFA_OVRR_UP=1
+      ReadOverRideAssignments "$@"
+      return 0
+  }
+
+
+  function ReadOverRideAssignments {
+    #
+    ## Name: ReadOverRideAssignments
+    ##
+    ## In:  in-line variable assignments
+    ## Out: variable assignments
+    ## Ret: 0
+    ##
+    ## Synopsis:
+    ##     Processes in-line variable assignments contained in argv ($@)
+    ##
+    ## Usage: ReadOverRideAssignments $@
+    ##
+    ## Description:
+    ##
+    ## - Using tokens left and right of equal signs for name/value pairs 
+    ## - Values may contain spaces and/or expressions
+    ## - Assignment occurs through "eval"
+    ## - Expressions are evaluated prior to eval
+    ##
+    ## Workings:
+    ##
+    ##    "eval"s all arguments that have an equal sign in them.
+    ##
+    ## See also: ReadOverRideAssignmentsUpCase
+    ##
+    #
+      typeset _STR="$@"
+      typeset VAR_N=""
+      typeset VAR_V=""
+      typeset _LEN=${#_STR}
+      typeset _LEN_B4=$_LEN
+      let _LEN_B4+=1
+    #
+    # no "=" means nothing to do, so return
+    #
+      [[ "$_STR" = *"="* ]] || return 1
+    #
+    # process $_STR while it ...
+    #  -     has non-zero length
+    #  - and is shorter than at the previous iteration
+    #  - and contains at least one equal sign
+    #
+      while \
+          [[ ${#_STR} -gt 0     ]] \
+      &&  [[ $_LEN_B4 -gt $_LEN ]] \
+      &&  [[ "$_STR"  =   *"="* ]] \
+      ; do
+          _LEN_B4=${#_STR}
+        #
+        # Extract first assignment from $_STR
+        #
+        # Note: cut | awk | sed are preferred over one convoluted sed expression.
+        # VAR_N (extract): 
+        #  - Extract last word from string left of "="
+        # VAR_V (extract): 
+        #  - Delete everything from start to first equal sign (included)
+        #  - Delete any alphanumeric characters + optional space + equal sign + remainder
+        #
+          VAR_N="$(
+              echo $_STR | cut -d"=" -f1 | awk '{print $NF}'
+          )"
+          VAR_V="$(
+              echo $_STR | sed "s/^[^=]*= *//;s/ *[^= ][^= ]* *=.*//"
+          )"
+        #
+        # upcase $VAR_N if requested
+        #
+          [[ "$_OFA_OVRR_UP" = "1" ]] && VAR_N="$(echo  $VAR_N | tr "[[:lower:]]" "[[:upper:]]")"
+        #
+        # execute assignment
+        #
+          IsVerbose && LogIt "Override var: ${VAR_N}=\"$VAR_V\""
+          eval $VAR_N=\"$VAR_V\"
+        #
+        # _STR (clip): 
+        #  - delete everything from start to first equal sign (included)
+        #    Note: the remainder still contains junk:
+        #          i.e., it starts with $VAR_V (junk), possibly followed by other assignments (not junk).
+        #          Discarding this will occur at the beginning of next iteration (if any), while extracting VAR_N. 
+        #          Rationale:
+        #          The original argv passed in to this function has the same properties: all the original
+        #          arguments preceding the override assignments must be disposed of.
+        #          Hence it is okay to leave this "heading junk" to be clipped at the next iteration.
+        #
+          _STR=$(
+              echo $_STR | sed 's/^[^=]*=//'
+          )
+          _LEN=${#_STR}
+      done
+      return 0
+  }
+
+  function RealPath {
+    #
+    ## In:  string: path (absolute or relative)
+    ## Out: string: path (absolute)
+    ## Ret: 0/66
+    ##
+    ## Synopsis: returns absolute, real, straight version of input path
+    ##
+    ## Usage: RealPath [<path>]
+    ## Alias:       rp [<path>]
+    ##
+    ## Description:
+    ##  - Input may be directory, file or symlink path, absolute or relative.
+    ##  - If relative, current working directory is pre-pended.
+    ##  - If empty, current working directory is processed.
+    ##  - Parent references are collapsed.
+    ##  - Output is always an absolute path.
+    ##  - Details are logged from volume level 2 upwards. 
+    ##
+    ## Workings:
+    ##  - Works path up from root (left to right).
+    ##  - Recursively resolves symlinks and parent references.
+    ##  - Iteration stops when worked path stops changing.
+    ##
+    #   .=========================================.
+    #   |                    <=  HANDLE WITH CARE |
+    #   | Recursive function  =>                  | 
+    #   '========================================='
+    # ------------------------------------------------------------------------------
+      VolDn
+      typeset INPUT
+      typeset LEFT
+      typeset LEFT_B4
+      typeset SYMLINK
+      typeset RIGH
+    #   
+    # strip heading/trailing junk from input
+    # This loop deals with consecutive ocurrences.
+    #
+      INPUT="$1"
+      IsVerbose && LogIt "RealPath: input \"$INPUT\""
+      while [[ "$INPUT" = *"/./"* ]] \
+      ||    [[ "$INPUT" =  "./"*  ]] \
+      ||    [[ "$INPUT" = *"/."   ]] \
+      ||    [[ "$INPUT" = *"/"    ]] \
+      ;do
+          INPUT="$(
+              echo $INPUT \
+              |sed '
+                   s@/\./@/@
+                   s@^\./@@
+                   s@/\.$@@
+                   s@/$@@
+              '
+          )"
+      done
+      IsVerbose && LogIt "RealPath: stripped: \"$INPUT\""
+    #
+    # convert relative input to absolute path
+    #
+      if [[ "$INPUT" != "/"* ]]; then
+          IsVerbose && LogIt "RealPath: relative: \"$INPUT\""
+          INPUT="$(pwd)/$INPUT"
+          IsVerbose && LogIt "RealPath: assembled absolute: \"$INPUT\""
+      fi
+    #
+    #  - split input "/a/b/c" into "/a" "b/c"
+    #  - assign to LEFT and RIGH
+    #
+      LEFT=$(echo $INPUT|sed 's@\(/[^/][^/]*\).*@\1@')
+      RIGH=$(echo $INPUT|sed "s@^$LEFT@@"|sed 's@^/@@')
+      LEFT_B4="/.."     # impossible path
+    #
+    # loop so long as worked path changes
+    #
+      while [[ "$LEFT" != "$LEFT_B4" ]] \
+      &&    [[ -n "$RIGH" ]] \
+      ; do
+          LEFT_B4="$LEFT"
+          REFT="$(echo $RIGH|sed 's@/@ @' | awk '{print $1}')"
+          RIGH="$(echo $RIGH|sed 's@/@ @' | awk '{print $2}')"
+          IsVerbose && LogCons ""
+          IsVerbose && LogCons "LEFT is $LEFT"
+          IsVerbose && LogCons "RIGH is $RIGH"
+        #
+        # Collapse parent references. 
+        # Note: enclosing loop gets fed one directory level at a time. 
+        # Therefore the expression below never has to resolve more than a
+        # single level of parent reference (../).
+        #
+          LEFT="$(
+              echo "$LEFT/$REFT" \
+              | sed '
+                   s@/\.$@/@
+                   s@/[^/][^/.]*/\.\.@@g
+                   s@//@/@g
+                   s@/$@@
+              '
+          )"
+          IsVerbose && LogCons "NEXT  is $LEFT"
+        #
+        # Check that path is readable (-r works on files, dirs and symlinks alike)
+        #
+          if [[ ! -r $LEFT ]]; then
+              LogError "RealPath: \"$LEFT\" - not readable"
+              VolUp
+              return 66
+          fi
+        #
+        # get last field of "ls -lsd" output (actual path or symlink)
+        #
+          SYMLINK=$(ls -lsd $LEFT|awk '{print $NF}')
+        #
+        # If different from input, it's a symlink. 
+        # Special processing required:
+        #
+          if [[ "$SYMLINK" != "$LEFT" ]]; then
+              IsVerbose && LogIt "\"$LEFT\" is a symlink to \"$SYMLINK\""
+            #
+            # If absolute, replace, else re-assemble
+            #
+              if [[ $SYMLINK = "/"* ]]; then
+                  LEFT="$SYMLINK"
+              else
+                  IsVerbose && LogIt "\"$SYMLINK\" is a relative path"
+                  LEFT="$(dirname $LEFT)/$SYMLINK"
+                  IsVerbose && LogIt "re-assembled as \"$LEFT\""
+              fi
+            #\
+            # .-----------------.
+            # | RECURSIVE CALL  |
+            # '-----------------'
+            # New path must undergo complete same processing as original input.
+            # Recursive processing is justified. 
+            #/
+              IsVerbose && LogIt "Recursive call to RealPath on \"$LEFT\""
+              VolUp
+              LEFT="$(
+                  RealPath "$LEFT"
+              )"
+              VolPrv
+          fi
+      done
+      VolUp
+      echo $LEFT
+  }
+
+  function SubPath {
+    #
+    ## Name: SubPath
+    ##
+    ## In:  two paths
+    ## Out: sub-path
+    ## Ret: 0/1
+    ##
+    ## Synopsis: masks intersection of paths
+    ##
+    ## Usage: SubPath P1 P2
+    ##
+    ## Description:
+    ##
+    ##    Strips $P1 portion of $P2, left-bounded
+    ##    Strips leading "/" from result.
+    ##
+    ##  Example: 
+    ##    $ SubPath /a /a/b/c
+    ##    b/c
+    ##
+    #
+       typeset P1
+       typeset P2
+       typeset PSUB
+       typeset RV=1
+  
+       if CheckVarMute $1 
+       then
+           P1=$(eval echo \$$1)
+       else
+           [[ -n $1 ]] && P1=$1 || return 1
+       fi
+  
+       if CheckVarMute $2 
+       then
+           P2=$(eval echo \$$2)
+       else
+           [[ -n $2 ]] && P2=$2 || return 1
+       fi
+  
+     #
+     # Strip trailing slash from P1 
+     # Add a trailing slash to P1 in the next expresion,
+     # which subtracts the leading P1 portion from P2. 
+     #
+       P1=$(echo $P1|sed 's@/$@@')
+       PSUB=$(echo $P2 | sed "s@^$P1/@@")
+     #
+     # Check that PSUB is indeed shorter than P2
+     # If it isn't, P1 wasn't found left-bounded in P2
+     #
+       if [[ ${#PSUB} -ge ${#P2} ]]
+       then
+         # Failure: no subtraction occured
+           RV=77
+       else
+         # success
+           echo $PSUB
+           RV=0
+       fi
+       return $RV
+  }
+
+  function LsFullPath {
+     #
+     ## Name: LsFullPath
+     ##
+     ## In:  <file (list)|*>
+     ## Out: file list with absolute paths
+     ## Ret: n.a.
+     ##
+     ## Synopsis: list absolute paths
+     ##
+     ## Usage:
+     ##        LsFullPath <file or dir name|*>
+     ##        LsFullPath <relative path>/<file or dir name|*>
+     ##        LsFullPath # produces no output
+     ##
+     ## Workings:
+     ##     For each <item> ls'd 
+     ##      - pre-pends $PWD (this leaves <item> a valid path)
+     ##      - calls StraightPath <item>, which contracts/straightens 
+     ##        that path.
+     ##
+     ## Alias: lll
+     ##
+     ## See also: StraightPath
+     #
+      typeset _TMPV;
+      typeset _PWD=$(pwd);
+      typeset _RV=0
+      VolDn
+      if [[ ! -n $1 ]] 
+      then
+          LsFullPath "*" 
+          _RV=0
+      else
+          ls -d $@ | while read $OFA_READ_TIME_OUT _TMPV
+          do
+              if [[ ! -r "$_TMPV" ]] 
+              then
+                  LogError "cannot read \"$_TMPV\""
+                  _RV=1
+              fi
+              if [[ "$_TMPV" != "/"* ]] 
+              then
+                  _TMPV="$_PWD/$_TMPV"
+              fi
+              ls -1d "$(StraightPath "$_TMPV")"
+          done
+      fi
+      VolUp
+      return $_RV
+  }
+
+  function StraightPath {
+    #
+    ## Name: StraightPath
+    ##
+    ## In:  <path> or variable name
+    ## Out: <path> or variable assignment
+    ## Ret: n.a.
+    ##
+    ## Synopsis: Contracts and straightens path.
+    ##     Note: Easily fooled by symlinks
+    ##
+    ## Usage: StraightPath <path>
+    ##
+    ## Description:
+    ##   Makes a convoluted path straight thus:
+    ##     1.- make /./ into /
+    ##     2.- make /x*/.. or /.x*/.. into /
+    ##     3.- make // into /
+    ##     3.- make /./ into /
+    ##     4.- delete trailing /.
+    ##     5.- delete trailing /
+    ##  Limitation:
+    ##      Symlinks in input path may yield invalid output. 
+    #
+      typeset _TMPV="$1"
+      typeset _TMPV_OLD="$_TMPV"
+      typeset _DONE=0
+      VolDn;
+      _TMPV=$(eval echo "\$_TMPV" | sed '
+  s@/\./@/@g
+  s@/[^/][^/.]*/\.\.@@g
+  s@//*@/@g
+  s@/\./$@/@
+  s@/\.$@@
+  s@/$@@
+  ';
+      )
+      if [[ "$_TMPV" = "$_TMPV_OLD" ]] 
+      then
+          IsVerbose && LogInfo "StraightPath: irreducible: $_TMPV" >&2
+          _DONE=1
+      elif [[ "$_TMPV" = *".."* ]]
+      then 
+        #
+        # Some parent reference has not been stripped off input.
+        # This occurs with "deep" parent references (../../)
+        #
+          VolUp
+          IsVerbose && LogInfo "StraightPath recurses: $_TMPV" >&2
+          StraightPath "$_TMPV"
+          VolDn
+      else
+          IsVerbose && LogInfo "StraightPath: clean: $_TMPV" >&2
+          _DONE=1
+      fi
+      if [[ $_DONE -eq 1 ]] 
+      then
+        #
+        # Test resulting path only after it was processed comletely
+        # Otherwise recusive calls would echo possibly invalid, 
+        # half-processed paths. 
+        #
+          [[ ! -r $_TMPV ]] && IsVerbose && LogWarning "invalid path: \"$_TMPV\""
+          echo $_TMPV
+      fi
+      VolUp
+  }
+
+  function StraightEnPath {
+    #
+    ## Name: StraightEnPath
+    ##
+    ## In:  variable name
+    ## Out: variable assignment
+    ## Ret: n.a.
+    ##
+    ## Synopsis: Assigns result of StraightPath to variable whose name
+    ##           was passed in as $1.
+    ##
+    ## Usage: StraightEnPath <Variable Name>
+    ##
+    ## Description:
+    ##   Close in name, StraightEnPath is a wrapper around StraightPath. 
+    ##   It is called by Core functions, among other things, so be cautious
+    ##   when modifying it.
+    ##
+    #
+      VolDn
+      eval "$1=$(eval StraightPath \$$1)"
+      VolUp
+  }
+
+
+  function MmDp {
+      [[ -n $1 ]] && MmDp="" && InIts=$1
+      export InIts="${1:-"$USER"}"
+      [[ ! -n $InIts ]] &&   \
+          printf "
+          User: => " && read InIts && export InIts
+      [[ ! -n $MmDp ]] &&    \
+          printf "
+          Passwd:      => "  \
+              && stty -echo  \
+              && read MmDp   \
+              && stty echo   \
+              && export MmDp \
+              && echo
+       [[ ! -n "$MmDp" ]] && unset InIts
+      return 0
+  }
+
+  function IsScript {
+    #
+    ## Tests whether in script.
+    ## WhosTalking yields $USER when not in a script.
+    ## Relies on the script not being named $USER or $USER.*
+    #
+    [[ "$OFA_WHOSTALKING" != "$USER" ]]
+  }
+
+  function IsInterActive {
+    #
+    ## Checks if tty present. 
+    ## Note: 
+    ##  - "nohup <script> &" 
+    ##    Differing return codes between OSs
+    ##    At the command line:
+    ##    - AIX:       0 (interactive, incorrectly)
+    ##    - Linux:     1 (i.e. batch)
+    ##    In Control-M:
+    ##    - All OSs    1 (i.e. batch, correctly)
+    #
+      tty -s || return 1
+  }
+
+  function IsInterActiveCLI {
+    #
+    ## returns
+    ##  0 if interactive and at _not_ in a script
+    ##  1 otherwise
+    #
+      IsInterActive && [[ "$OFA_WHOSTALKING" = "$USER" ]]
+  }
+
+  function IsVerbose {
+    #
+    ##
+    ## Name: IsVerbose
+    ##
+    ## In:  n.a.
+    ## Out: n.a.
+    ## Ret: 0|1
+    ##
+    ## Synopsis: returns verbose mode (0|1)
+    ##           logs verbose level if greater than 1
+    ##
+    ## Usage: IsVerbose
+    ##
+    ## Description:
+    ##
+    ##    Used by functions to decide whether or not to produce console output.
+    #
+      [[ $OFA_CONS_VOL -gt 0 ]] && return 0 || return 1
+  }
+  # ==============================================================================
+  # == functions: core
+  # ==============================================================================
+
+  function _ShowCaller {
+     # 
+     # Name: _ShowCaller
+     #
+     # In:  n.a.
+     # Out: string
+     # Ret: 0|1
+     #
+     # Synopsis: echoes the "caller name"
+     #  - if a script, its short name (truncated after ".")
+     #  - else, the os account name.
+     #
+     # Usage: _ShowCaller
+     #
+     # Description:
+     #
+     #    Like a shorthand for "basename $0|sed '/\..*//'",
+     #    Extensively used throughout the ofa standard functions library to construct paths, 
+     #    tags, file names etc.
+     #
+     # Workings:
+     #
+     #    Uses "ps|sed" rather than "basename", which produces different output between 
+     #    e.g. bash and ksh.
+     #    The tradeoff is a dependency on ps output + regular expressions.
+     #    The sed used here works as follows: : 
+     #     1.- delete any "-" optionally followed by non-space (e.g. "-p", or "--verbose")
+     #     2.- replace the first "/usr" by a single whitespace
+     #     3.- delete anything up to and including the interpreter bit (e.g. " /sbin/bash", 
+     #         " /bin/bash")
+     #       - preserve contiguous non-space after that
+     #       - delete the remainder
+     #       Note: If the image is not that of a shell script with a #!-style 
+     #             interpreter invocation, (3) leaves the line unchanged.
+     #     4.- preserves only the first contiguous non-space e.g. 
+     #         - "dba" (line intact, with "dba" the username, showing leftmost
+     #         - "/oracle/local/bin/rmanbk.sh", alone on the line after (3)
+     #     5.- if the remainder is neither a file, nor a link, and has no slashes, then the 
+     #         caller is the current shell, so the user is the current Unix account. 
+     #       
+     # 
+      typeset _RV
+      typeset _PROG="$(
+          ps -fp$$ \
+        |tail -1 \
+        |sed '
+             s@ \-\-*[^ ]*@ @g
+             ;s@/usr@ @
+             ;s@^.* /s*bin/[^ ][^ ]*  *\([^ ][^ ]*\).*@\1@g
+             ;s@ *\([^ ][^ ]*\).*@\1@
+         '
+      )"
+      VolDn
+
+      if [[ ! -n "$_PROG" ]];then
+          _RV=1
+      else
+          if [[ ! -f $_PROG ]] && [[ ! -h $_PROG ]] && [[ $_PROG != *"/"* ]] && [[ ! -f $OFA_STA_PWD/$_PROG ]] && [[ ! -h $OFA_STA_PWD/$_PROG ]]
+          then
+            #
+            # when $_PROG is neither file nor link, 
+            # show the effective username from output of id command
+            #
+              _PROG=$(id | sed 's@^[^(]*(@@;s@).*@@')
+          fi
+          echo "$_PROG"
+          _RV=0
+      fi
+      VolUp
+      return $_RV
+  } 
+
+  function _ExtractVarnamesFromFile {
+      VolDn
+      [[ ! -r $1 ]] && return 1 
+      egrep -v "^ *#|^ *$" $1 | \
+          egrep "[^#][^#]*="  | \
+          sed 's/export  *//; s/=.*//'
+      VolUp
+  }
+
+  function _ClearProfile {
+      typeset _TMPV=""
+      VolDn
+      for _TMPV in $(_ExtractVarnamesFromFile $1);do
+          if [[ -n $(eval echo \$$(eval echo ${_TMPV}_DFLT)) ]]
+          then
+              eval $_TMPV=\$$(eval echo ${_TMPV}_DFLT) 
+          else
+              eval unset $_TMPV
+          fi
+      done
+      VolUp
+  }
+
+  function substV {
+      #
+      ## Description:
+      ##    Subsitutes <b> for <a> in a [series of] variable[s]
+      ##
+      ## In: <string a> <string b> <variable name[s]>
+      ## Out: Variable Assigment[s]
+      ## Ret: 0
+      ##
+      # Replace patterns in a the contents of a list of vars.
+      # usage: substV <to-replace> <replacement> <varname list>
+      #
+      typeset a___=$1
+      typeset b___=$2
+      typeset _TMPV=""
+      shift
+      shift
+      VolDn
+      for nom_V in $@; do
+         _TMPV=$(eval echo \$$nom_V | sed "s@$a___@$b___@g")
+         eval $nom_V=\"$_TMPV\"                              #" <- '"' syntax colouring...
+      done
+      VolUp
+  }
+
+  function CheckVar {
+    #
+    ## Description: Checks Vars and reports about them
+    ##
+    ## In:  Variable Names
+    ## Stdout: nothing
+    ## Stderr: Log Messages
+    ## Ret: number of misses (void or non-existing)
+    ##
+    #
+      VolUp 
+      typeset _TMPV
+      typeset _RV=0
+      [[ ! -n "$@" ]] && LogWarning "CheckVar: no arg received" && let _RV+=1
+      for _TMPV in $@;do
+          if ! IsLegalVarName $_TMPV
+          then
+              LogWarning "\"$_TMPV\" not a legal variable name"
+              let _RV+=1
+          else
+              LogIt "$(eval echo "${_TMPV}=\\\"\$${_TMPV}\\\"")"     #" <-- '"' syntax colouring
+              if [[ ! -n $(eval echo \$$_TMPV)  ]]
+              then
+                  LogWarning "$_TMPV is empty" 
+                  let _RV+=1
+              fi
+          fi
+      done
+      VolDn
+      return $_RV
+  }
+
+  function CheckVarMute {
+    #
+    ## Description: Checks Vars for existence
+    ##
+    ## In:  Variable Name[s]
+    ## Stdout: n.a.
+    ## Stderr: n.a.
+    ## Ret: number of misses (void or non-existing)
+    ## 
+    #
+      VolUp 
+      typeset _TMPV
+      typeset _RV=0
+      [[ ! -n "$@" ]] && LogWarning "CheckVar: no arg received" && let _RV+=1
+      for _TMPV in $@;do
+          if ! IsLegalVarName $_TMPV \
+          || [[ ! -n $(eval echo \$$_TMPV)  ]]
+          then
+              let _RV+=1
+          fi
+      done
+      VolDn
+      return $_RV
+  }
+
+  function IsLegalVarName {
+    #
+    ## Description: determine if a legal variable name
+    ##
+    ## In:  Character String
+    ## Out: n.a.
+    ## Ret: 0/1
+    ##
+    ## A Legan variable is any string made up of alphanumeric characters 
+    ## The underscore "_" counts as alphanumeric here, 
+    ## albeit the posix :alnum: pragma does not consider it alphanumeric.
+    ##
+    #
+      [[ -n $(echo $@ | tr "_" "a" | sed -n "/^[${_ALNUM_}][${_ALNUM_}]*$/p") ]]
+  }
+
+  function CheckFile {
+    #
+    ## Description: Check upon a file
+    ##
+    ## In:  File or Symlink / Variable Name
+    ## Out: Status Messages
+    ## Ret: Failure Count
+    ##
+    ## Usage: CheckFile <File(s)>
+    ## 
+    ## See also: CheckFileMute
+    #
+      typeset _TMPV=""
+      typeset _CAND=""
+      typeset _RESV=""
+      typeset _RV=0
+      for _TMPV in $@;do
+          _CAND="$_TMPV"
+          _RESV="$_TMPV"
+        #
+        # Resolve item (file/symlink or variable name)
+        # First round of elimination.
+        #
+          if [[ -f $_CAND ]] || [[ -h $_CAND ]]
+          then
+              _RESV="$_CAND"
+          elif IsLegalVarName $_CAND
+          then
+            # maybe a variable name
+            #
+              _CAND=$(eval echo \$$_CAND)
+              if [[ -n $_CAND ]] 
+              then
+                # indeed a variable name
+                #
+                  _RESV="$_TMPV is $_CAND"
+                  IsVerbose && LogInfo "$_RESV" 
+              else
+                # not a populated variable name
+                #
+                  LogWarning "No File / Variable Empty: \"$_RESV\""
+                  let _RV+=1
+                  continue
+              fi
+          else
+              LogWarning "No File: \"$_RESV\""
+              let _RV+=1
+              continue
+          fi
+        #
+        # Item resolved: do file tests on it
+        #
+          if [[ ! -f $_CAND ]] && [[ ! -h $_CAND ]]
+          then
+            # Not a file or symlink: increment failures and skip to next
+            #
+              LogWarning "Not a file or Symlink: \"$_RESV\""
+              LogWarning "\"$_CAND\""
+              let _RV+=1
+              continue
+          else
+            # Log some information regarding the file
+            #
+              if IsVerbose
+              then
+                  [[   -h $_CAND ]] && LogInfo "$_RESV is a symlink" && LogInfo "$(ls -lsd $_CAND)"
+                  [[ ! -r $_CAND ]] && LogInfo "$_RESV is not readable"
+                  [[ ! -w $_CAND ]] && LogInfo "$_RESV is not writeable"
+                  [[ ! -s $_CAND ]] && LogInfo "$_RESV is empty"
+              fi
+          fi
+      done
+      return $_RV
+  }
+
+  function CheckFileMute {
+    #
+    ## Name: CheckFileMute
+    ##
+    ## In:  files
+    ## Out: n.a.
+    ## Ret: 0/1
+    ##
+    ## Synopsis: Calls CheckFile in silent mode
+    ##
+    ## Usage: CheckFileMute <File(s)>
+    ##
+    #
+      typeset RV
+      VolSet 0
+      CheckFile "$@"
+      RV=$?
+      VolPrv
+      return $RV
+  }
+
+  function LogShowVar {
+    #
+    ## Description: Shows a variable name+contents, with log
+    ##
+    ## In:  Variable name
+    ## Out: Name=Value on STDOUT, warnings on STDERR.
+    ## Ret: Number of misses (empty or non-existing variables)
+    #
+      typeset _TMPV
+      typeset _RV=0
+      LOFGILE=${LOGFILE:-"/dev/null"}
+      VolDn
+      for _TMPV in $@;do
+          echo "    $_TMPV=\"$(eval echo "\$${_TMPV}" | sed 's@"@\\"@g')\""
+      done | tee -a $LOGFILE
+      VolUp
+      return $_RV
+  }
+
+  function ShowVar {
+    #
+    ## Description: Shows a variable name+contents
+    ##
+    ## In:  Variable name
+    ## Out: Name=Value on STDOUT, warnings on STDERR.
+    ## Ret: Number of misses (empty or non-existing variables)
+    #
+      typeset _TMPV
+      typeset _RV=0
+      VolDn
+      for _TMPV in $@;do
+          echo "    $_TMPV=\"$(eval echo "\$${_TMPV}" | sed 's@"@\\"@g')\""
+      done
+      VolUp
+      return $_RV
+  }
+
+  function CleanPath {
+    # 
+    ## Weeds out PATHs
+    ## - deletes invalid members
+    ## - de-duplicates (preserving order)
+    ##
+    ## Usage: CleanPath [<path name>|PATH] 
+    ##
+    # 
+      typeset _RV=0
+      typeset _MEMBER=""
+      VolDn 20
+      # 
+      # first, save away local variables
+      # 
+      [[ ${#nom_V}  -gt 0 ]] && typeset saveaway_nom_V=$nom_V   && unset nom_V
+      [[ ${#old_V}  -gt 0 ]] && typeset saveaway_old_V=$old_V   && unset old_V
+      [[ ${#V}      -gt 0 ]] && typeset saveaway_V=$V           && unset V
+      [[ ${#cnt_ok} -gt 0 ]] && typeset saveaway_cnt_ok=$cnt_ok && unset cnt_ok
+      [[ ${#cnt_ko} -gt 0 ]] && typeset saveaway_cnt_ko=$cnt_ko && unset cnt_ko
+      [[ ${#cnt_rd} -gt 0 ]] && typeset saveaway_cnt_rd=$cnt_rd && unset cnt_rd
+      #
+      # LOOP :
+      #
+      for nom_V in $@; do
+        #
+        # Get the name of the variable and its value and save a copy.
+        # Double and trailing colons and slashes are deleted.
+        # This is necessary in order to be able later to match the path against its saved original.
+        # There are 6 sed expressions lined up in the assignment : 
+        # 
+        #   s/::*/:/g;           -- contracts all multiple ":" into single ":"
+        #   s@//*@/@g;           -- contracts all multiple "/" into single "/"
+        #   s/^://;              -- deletes leading  ":"
+        #   s/:$//;              -- deletes trailing ":"
+        #   s@\([^:]\)/:@\1:@g;  -- makes all "/:" into ":", except ":/:" and leading "/:"
+        #   s@\([^:]\)/$@\1@;    -- deletes trailing slash, except ":/"
+        #
+          V=$(eval "echo \$$nom_V" | sed ' s/::*/:/g;  s@//*@/@g;  s/^://;  s/:$//;  s@\([^:]\)/:@\1:@g;  s@\([^:]\)/$@\1@; ')
+          old_V=$V
+        #
+        # traiter le cas du chemin sans ":"
+        #
+          if [[ "$V" != *":"* ]];then
+              # le chemin ne comporte pas de ":"
+              if [[ -d $V ]];then
+                  LogInfo "$nom_V=$V is valid" 
+              else 
+                  let _RV+=1
+                  LogWarning "$nom_V (\"$V\") not a valid directory path"
+                  eval unset $nom_V
+              fi
+              continue 
+          fi
+        #
+        # put members of path onto an array
+        #
+     	cnt_ok=0
+     	cnt_ko=0
+     	cnt_rd=0
+     	for _MEMBER in `echo $V | tr ":" " "`;do
+     	    #
+     	    # check $_MEMBER if we have seen it already
+     	    #
+              IsVerbose && LogIt checking $_MEMBER
+     	    i=0 && seen=NO	    
+     	    while [[ $i -lt ${#temp_ar_ok[*]} && $seen = "NO" ]];do
+     		let i+=1 && [[ ${temp_ar_ok[$i]} = $_MEMBER ]] && seen=YES 
+     	    done
+     	    #
+     	    # If not seen yet, check if valid path and add to either temp_ar_ok or temp_ar_ko. 
+     	    # Otherwise, it's a redundant member of the path, and is added to temp_ar_rd. 
+     	    #
+     	    if [[ $seen = "NO" ]];then
+     		if [[ -d $_MEMBER || $nom_V = CLASSPATH && -f $_MEMBER ]];then
+     		    let cnt_ok+=1 && temp_ar_ok[$cnt_ok]=$_MEMBER
+     		else
+     		    let cnt_ko+=1 && temp_ar_ko[$cnt_ko]=$_MEMBER 
+     		fi
+     	    else
+     		let cnt_rd+=1 && temp_ar_rd[$cnt_rd]=$_MEMBER 
+     	    fi
+     	done
+        #
+        # re-assemble path from array
+        # Note : the first assignment of V before the loop makes for easy handling of the ":" (colon). 
+        #
+     	cnt_ok=1
+          [[ ${#temp_ar_ok[*]} -gt 0 ]] && V=${temp_ar_ok[$cnt_ok]} 
+     	while [[ $cnt_ok -lt ${#temp_ar_ok[*]} ]];do
+     	    let cnt_ok+=1 && V=${V}:${temp_ar_ok[$cnt_ok]}
+     	done
+        #
+        # if verbose mode and path was cleaned, say something 
+        #
+     	if IsVerbose;then
+     	    [[ ${#V} -ne ${#old_V} ]] \
+                  && LogInfo "	$script : cleaned up \$$nom_V"
+     	  #
+     	  # display redundant path members
+     	  #
+     	    if [[ $cnt_rd -gt 0 ]];then
+                  if IsVerbose
+                  then
+                      [[ $cnt_rd -gt 1 ]] && \
+                          LogInfo "	The following path members were redundant : " || \
+                          LogInfo "	The following path member was redundant : "
+                  fi
+                  if IsVerbose
+                  then
+     		    cnt_rd=0
+     		    while [[ $cnt_rd -lt ${#temp_ar_rd[*]} ]];do
+     		        let cnt_rd+=1 && LogInfo "	 - ${temp_ar_rd[$cnt_rd]}"
+     		    done
+                  fi
+     	    fi
+     	  #
+     	  # display invalid path members
+     	  #
+     	    if [[ $cnt_ko -gt 0 ]];then
+                  VolUp
+     		[[ $cnt_ko -gt 1 ]] \
+                      && LogInfo "	The following path members were invalid : " \
+                      || LogInfo "	The following path member was invalid : "
+                  if test IsVerbose
+                  then
+     		cnt_ko=0
+     		    while [[ $cnt_ko -lt ${#temp_ar_ko[*]} ]];do
+     		        let cnt_ko+=1 && LogInfo "	 - ${temp_ar_ko[$cnt_ko]}"
+     		    done
+                  fi
+                  VolDn
+     	    fi
+      	fi
+        #
+        # export the variable with its original name 
+        #
+     	eval export $nom_V=$V  
+        #
+        # cleanup vars after each round
+        #
+     	unset  V nom_V old_V 
+     	while [[ $cnt_ok > 0 ]];do unset temp_ar_ok[$cnt_ok]; let cnt_ok-=1; done
+     	while [[ $cnt_ko > 0 ]];do unset temp_ar_ko[$cnt_ko]; let cnt_ko-=1; done
+     	while [[ $cnt_rd > 0 ]];do unset temp_ar_rd[$cnt_rd]; let cnt_rd-=1; done
+      done
+    # 
+    # Restore any saved-away variables from the path-cleansing loop above
+    # 
+      [[ ${#saveaway_nom_V}  -gt 0 ]] && nom_V=$saveaway_nom_V   && unset saveaway_nom_V  || unset nom_V 
+      [[ ${#saveaway_old_V}  -gt 0 ]] && old_V=$saveaway_old_V   && unset saveaway_old_V  || unset old_V
+      [[ ${#saveaway_V}      -gt 0 ]] && V=$saveaway_V           && unset saveaway_V      || unset V
+      [[ ${#saveaway_cnt_ok} -gt 0 ]] && cnt_ok=$saveaway_cnt_ok && unset saveaway_cnt_ok || unset cnt_ok
+      [[ ${#saveaway_cnt_ko} -gt 0 ]] && cnt_ko=$saveaway_cnt_ko && unset saveaway_cnt_ko || unset cnt_ko
+      [[ ${#saveaway_cnt_rd} -gt 0 ]] && cnt_rd=$saveaway_cnt_rd && unset saveaway_cnt_rd || unset cnt_rd
+      VolUp 20
+      return $_RV
+  }
+
+  # ==============================================================================
+  # == functions: formatting
+  # ==============================================================================
+
+  function FrameTop {
+      printf "    .%20s-%-30s.\n" "--------------------" "-------------------------------"
+  }
+
+  function FrameBar {
+      printf "    |%20s-%-30s|\n" "--------------------" "-------------------------------"
+  }
+
+  function FrameBot {
+      printf "    '%20s-%-30s'\n" "--------------------" "-------------------------------"
+  }
+
+  function FramePair {
+      typeset _NAME="$1"
+      shift 1
+      typeset _VALUE="$*"
+      printf "    |%20s %-30s |\n" "$_NAME" "$_VALUE"
+  }
+
+  function FramePairs {
+      while read $OFA_READ_TIME_OUT _NAME _VALUE; do
+          [[ -n $_NAME ]] && FramePair "$_NAME" "$_VALUE"
+      done
+  }
+
+  function InDent {
+      sed 's/^/  /'
+  }
+
+  function LogLittleBanner {
+      ##
+      ## Description: 
+      ##   echoes input in a little banner with log
+      ##
+      LOFGILE=${LOGFILE:-"/dev/null"}
+     (
+      echo "  .--------------------------------------."
+      printf "  |  %-36s|\n" "$@"
+      echo "  '--------------------------------------'"
+     ) | tee -a $LOGFILE
+  }
+
+  function LittleBanner {
+      ##
+      ## Description: 
+      ##   echoes input in a little banner
+      ##
+      echo "  .--------------------------------------."
+      printf "  |  %-36s|\n" "$@"
+      echo "  '--------------------------------------'"
+  }
+
+  function LogLongBanner {
+      ##
+      ## Description: 
+      ##   echoes input in a long banner
+      ##
+      LOFGILE=${LOGFILE:-"/dev/null"}
+     (
+      echo "  .------------------------------------------------------------------------------."
+      printf "  |  %-76s|\n" "$@"
+      echo "  '------------------------------------------------------------------------------'"
+     ) | tee -a $LOGFILE
+  }
+
+  function LongBanner {
+      ##
+      ## Description: 
+      ##   echoes input in a long banner
+      ##
+      echo "  .------------------------------------------------------------------------------."
+      printf "  |  %-76s|\n" "$@"
+      echo "  '------------------------------------------------------------------------------'"
+  }
+
+  function CartRidge {
+      echo "  .-----------------------------------------------------------------------------."
+      while read $OFA_READ_TIME_OUT line;do
+          printf "  | %-76s|\n" "$line"
+      done
+      echo "  '-----------------------------------------------------------------------------'"
+  }
+
+  function LogCartRidge {
+      LOFGILE=${LOGFILE:-"/dev/null"}
+     (
+      echo "  .-----------------------------------------------------------------------------."
+      while read $OFA_READ_TIME_OUT line;do
+          printf "  | %-76s|\n" "$line"
+      done
+      echo "  '-----------------------------------------------------------------------------'"
+     ) | tee -a $LOGFILE
+  }
+
+  function CartRidgeH {
+      LOFGILE=${LOGFILE:-"/dev/null"}
+     (
+      echo "  # .-----------------------------------------------------------------------------."
+      while read $OFA_READ_TIME_OUT line;do
+          printf "  # | %-76s |\n" "$line"
+      done
+      echo "  # '-----------------------------------------------------------------------------'"
+     ) | tee -a $LOGFILE
+  }
+
+  function CartRidgeS {
+     (
+      LOFGILE=${LOGFILE:-"/dev/null"}
+      echo "  REM .-----------------------------------------------------------------------------."
+      while read $OFA_READ_TIME_OUT line;do
+          printf "  REM | %-76s|\n" "$line"
+      done
+      echo "  REM '-----------------------------------------------------------------------------'"
+     ) | tee -a $LOGFILE
+  }
+
+  function HorizontalBar {
+      echo "  -------------------------------------------------------------------------------"
+  }
+  # ==============================================================================
+  # == functions: logging
+  # ==============================================================================
+
+  function _LogStdOut {
+    #
+    # echo timestamped input to stdout
+    #
+      echo "$(Tmsp) - $*"
+  }
+
+  function _LogStdErr {
+    #
+    # echo timestamped input to stdout
+    #
+      echo "$(Tmsp) - $*" >&2
+  }
+
+  function _MkLog {
+    #
+    # create log file
+    #   - if $1 is non-null, it is used as a tag in the log file name
+    #   - the log is created at $OFA_LOG/$OFA_WHOSTALKING/ with a unique name that
+    #     comprises elements such as name of script, time stamp end tag.
+    #   - If it cannot be created at its default location, it is created in
+    #     the current directory or, that failing, in /tmp
+    #
+      typeset _LOG4=$OFA_WHOSTALKING
+
+      if [[ -n "$1" ]] 
+      then
+          LOG_TAG="$(basename $(echo $@|sed "s/^[^${_ALNUM_}_][^${_ALNUM_}_]*//;s/[^${_ALNUM_}_][^${_ALNUM_}_]*/./g;s/\.$//"))"
+      else
+          LOG_TAG="no_tag"
+      fi
+
+      mkdir -p $OFA_LOG/$OFA_WHOSTALKING 2>/dev/null
+      chmod g+rwx $OFA_LOG/$OFA_WHOSTALKING 2>/dev/null
+      if [[ -d $OFA_LOG ]] && [[ -w $OFA_LOG ]];then
+          LOGFILE=$OFA_LOG/$_LOG4/$_LOG4.$LOG_TAG.$PPID.$$.$(Tmsp).log
+      else
+          echo "OFA_LOG (\"$OFA_LOG\"): not a writeable directory"
+      fi
+      touch $LOGFILE 2>/dev/null
+      if [[ $? -ne 0 ]];then
+          LogIt "Location not usable for a $LOGFILE"
+          substV "/" "_" LOG_TAG
+          [[ -w . ]] && LOGFILE=$_LOG4$LOG_TAG.$PPID.$$.$(Tmsp).log || LOGFILE=/tmp/$_LOG4$LOG_TAG.$PPID.$$.$(Tmsp).log
+          LogWarning "Re-located log file to: $LOGFILE"
+      fi
+      mkdir -p $(dirname $LOGFILE)
+      LogIt "Touch: $LOGFILE"
+      touch $LOGFILE || return 1
+  }
+
+  function _CheckLogPath {
+    #
+    # See if logging is requested (OFA_LOG_STATUS is 1), 
+    # and if so, whether a logfile is defined and writeable. 
+    # Anything failing, create a new logfile. 
+    #
+      [[ $OFA_LOG_STATUS -eq 1 ]] && \
+      [[ -n $LOGFILE ]]           && \
+      [[ -w $LOGFILE ]]           || _MkLog $@
+      return 0
+  }
+
+  function _LogNew {
+    #
+    # - Creates a new log file
+    # - Redefines the Logit function
+    # - calls it once (display name of logfile)
+    #
+
+    #
+    # turn down vol if caller not interactive shell (i.e. script)
+    #
+      [[ "$USER" != "$OFA_WHOSTALKING" ]] && VolDn
+      function LogIt {
+          if [[ $OFA_LOG_REQ -gt 0 ]]
+          then
+              _CheckLogPath
+              [[ ! -n $1 ]] && LogIt $LOGFILE
+              function LogIt {
+                  if [[ ! -n $1 ]] 
+                  then
+                      LogIt $LOGFILE 
+                  else
+                      if [[ $OFA_LOG_STATUS -gt 0 ]]
+                      then
+                          [[ $OFA_CONS_VOL -gt 0 ]] \
+                              && _LogStdErr "$*" 
+                          _LogStdOut "$*" >> $LOGFILE
+                      fi
+                  fi
+                  return 0
+              }
+          else
+              function LogIt {
+                  [[ $OFA_CONS_VOL -gt 0 ]] && _LogStdErr "$*"
+                  return 0
+              }
+          fi
+          [[ $OFA_LOG_STATUS -lt 1 ]] && let OFA_LOG_STATUS+=1
+      }
+      LogIt
+  }
+
+  function StdOut {
+    # 
+    ## Name: StdOut
+    ##
+    ## Synopsis: Echoes to stdout if OFA_CONS_VOL is greater than 0.
+    ##
+    ## Usage: StdOut [<string>]
+    ##
+    ## See also: 
+    ##  - LogIt
+    # 
+      [[ $OFA_CONS_VOL -gt 0 ]] && echo "$*" >&1
+      return 0
+  }
+
+  function StdErr {
+    # 
+    ## Name: StdErr
+    ##
+    ## Synopsis: Echoes to stderr if OFA_CONS_VOL is greater than 0.
+    ##
+    ## Usage: StdOut [<string>]
+    ##
+    ## See also: 
+    ##  - LogIt
+    # 
+      [[ $OFA_CONS_VOL -gt 0 ]] && echo "$*" >&2
+      return 0
+  }
+
+  function LogIt {
+    # 
+    ## Name: LogIt
+    ## 
+    ## In:  string
+    ## Out: write to file
+    ## Ret: 0
+    ##
+    ## Synopsis:  The original LogIt function.
+    ##
+    ## Usage: LogIt ["<message>"]
+    ##
+    ## Description:
+    ##
+    ##   Logs its arguments with a time stamp. 
+    ## 
+    ##   Two versions:
+    ##   =============
+    ##   - The original one logs to stderr only. 
+    ##   - LogStart replaces it with one that logs to $LOGFILE, too.
+    ##   - LogStop re-instates the original.
+    ##
+    ##   Output Volume:
+    ##   ==============
+    ##   Console output(stderr) verbosity can be adjusted viathe VolUp/VolDn functions. .
+    ##   File output cannot be adjusted: all input is written to file at all times.
+    ##
+    ## Workings: 
+    ##
+    ##   Console output occurs when the $OFA_CONS_VOL is greater than 0.
+    ##   Programs and functions can increment, decrement or set its value. 
+    ##   Many standard functions decrement it by 1 to make themselves less
+    ##   verbose, and increment it again when done. 
+    ##   This way, nested functions become less and less verbose. 
+    ## 
+    ## See also:
+    ##  - LogStdIn
+    ##  - LogStart
+    ##  - LogChecker
+    ##  - The Vol* functions
+    # 
+
+      [[ $OFA_CONS_VOL -gt 0 ]] && _LogStdErr "$*"
+      return 0
+  }
+
+  function LogStart {
+    # 
+    ## Name: LogStart
+    ##
+    ## Synopsis: start logging to file
+    ## 
+    ## Usage: LogStart [<tag>|<filepath>]
+    ##
+    ## Description:
+    ##   
+    ##   - By default, the log file is created with a dynamic name
+    ##     under the programs log directory. 
+    ##     I.e., $OFA_LOG/$OFA_WHOSTALKING/$(WhosTalking.$$.$(Tmsp)).log
+    ##   - If an absolute path is given as an argument, that becomes the log file. 
+    ## 
+    # 
+      VolDn
+      OFA_LOG_REQ=1
+      _MkLog $@
+       touch $LOGFILE && OFA_LOG_STATUS=1
+      _LogNew
+      LogIt "Start logging for \"$OFA_WHICHSCRIPT $@\"" 
+      OfaShowVersion | LogStdIn
+      if [[ -f "$OFA_EARLY_LOG" ]]
+      then
+          LogIt "including <<OFA_EARLY_LOG (\"$OFA_EARLY_LOG\")"
+          cat "$OFA_EARLY_LOG" >> $LOGFILE
+          LogIt "OFA_EARLY_LOG (end)"
+          unset OFA_EARLY_LOG
+          function EarlyLog {
+              LogIt $@
+          }
+      fi
+
+      VolUp
+      return 0
+  }
+
+  function LogStop {
+    # 
+    ## Name: LogStop
+    ##
+    ## Synopsis: Stop logging to file
+    ## 
+    ## Usage: LogStop
+    ##
+    ## Description:
+    ##   
+    ##   - Stops logging to file by redefining the LogIt function.
+    ##     under the programs log directory. 
+    ##     I.e., $OFA_LOG/$OFA_WHOSTALKING/$(WhosTalking.$$.$(Tmsp)).log
+    ##   - If an absolute path is given as an argument, that becomes the log file. 
+    ## 
+    # 
+
+      OFA_LOG_STATUS=-1 # (forgotten why)
+      OFA_LOG_REQ=0
+      _LogNew
+  }
+
+  function LogStdInEcho {
+    #
+    ## Name: LogStdInEcho
+    ##
+    ## In:  STDIN
+    ## Out: File+Console
+    ## Ret: 0
+    ##
+    ## Synopsis: Logs Stdin (pipe, multi-line)
+    ##
+    ## Usage: <output> | LogStdInQ
+    ##
+    ## Description:
+    ##
+    ##    Pipe any output from a loop, cat or function into LogStdIn. 
+    ##    Behaviour is like LogIt, only input comes fromthe left. 
+    ##
+    ## Warning: The pipe inhibits any EXIT from where the output is produced. 
+    ##          This can cause confusing behaviour. 
+    #
+      LOGFILE=${LOGFILE:-"/dev/null"}
+      while read $OFA_READ_TIME_OUT line; do
+          [[ -n $line ]] && echo "$line"
+      done | tee -a $LOGFILE
+  }
+
+  function LogStdInRaw {
+    #
+    ## Name: LogStdInRaw
+    ##
+    ## In:  STDIN
+    ## Out: File+Console
+    ## Ret: 0
+    ##
+    ## Synopsis: Logs Stdin (pipe, multi-line)
+    ##
+    ## Usage: <output> | LogStdInRaw
+    ##
+    ## Description:
+    ##
+    ##    Pipe any output from a loop, cat or function into LogStdIn. 
+    ##    Behaviour is like LogIt, only input comes fromthe left. 
+    ##
+    ## Warning: The pipe inhibits any EXIT from where the output is produced. 
+    ##          This can cause confusing behaviour. 
+    #
+      LOGFILE=${LOGFILE:-"/dev/null"}
+      while read $OFA_READ_TIME_OUT line; do
+          [[ -n $line ]] && echo "$line" 1>&2
+      done | tee -a $LOGFILE
+  }
+
+  function LogItQ {
+    #
+    ## Name: LogItQ
+    ##
+    ## In:  STDIN
+    ## Out: $LOGFILE, if available
+    ## Ret: 0
+    ##
+    ## Synopsis: Logs $@, silently (does not print to console)
+    ##
+    ## Usage: LogItQ <str>
+    ##
+    ## Description:
+    ##
+    ##    Log without Console output.
+    ##
+    #
+      VolSet 0
+      LogIt "$@"
+      VolPrv
+  }
+
+  function LogStdInQ {
+    #
+    ## Name: LogStdInQ
+    ##
+    ## In:  STDIN
+    ## Out: $LOGFILE, if available
+    ## Ret: 0
+    ##
+    ## Synopsis: Logs Stdin (pipe, multi-line) but does not print to to console
+    ##
+    ## Usage: <output> | LogStdInQ
+    ##
+    ## Description:
+    ##
+    ##    Pipe any output from a loop, cat or function into LogStdIn.
+    ##    Behaviour is like LogItQ, only input comes fromthe left.
+    ##
+    ## Warning: The pipe inhibits any EXIT from where the output is produced.
+    ##          This can cause confusing behaviour.
+    #
+      VolSet 0
+      while read $OFA_READ_TIME_OUT line; do
+          [[ -n $line ]] && LogIt "$line"
+      done
+      VolPrv
+  }
+
+  function LogStdIn {
+    #
+    ## Name: LogStdIn
+    ##
+    ## In:  STDIN
+    ## Out: File+Console
+    ## Ret: 0
+    ##
+    ## Synopsis: Logs Stdin (pipe, multi-line)
+    ##
+    ## Usage: <output> | LogStdIn
+    ##
+    ## Description:
+    ##
+    ##    Pipe any output from a loop, cat or function into LogStdIn. 
+    ##    Behaviour is like LogIt, only input comes fromthe left. 
+    ##
+    ## Warning: The pipe inhibits any EXIT from where the output is produced. 
+    ##          This can cause confusing behaviour. 
+    #
+      while read $OFA_READ_TIME_OUT line; do
+          [[ -n $line ]] && LogIt "$line"
+      done
+  }
+
+  function HelpOut {
+    #
+    ##
+    ## Name: HelpOut
+    ##
+    ## In: string ($1)
+    ## Out: n.a.
+    ## Ret: n.a.
+    ##
+    ## Synopsis: 
+    ##     Invokes OfaHelp on $1 if applicable, then BailOut
+    ##
+    ## Description:
+    ##     Checks whether $1 is in ofa. 
+    ##     If so, calls help and shifts off $1.
+    ##     If not, keeps $1
+    ##     In any event, calls BailOut with $@.
+    ##
+      OfaHelp "$1" && shift 1
+      BailOut $@
+  }
+
+  function BailOut {
+    #
+    ## Name: BailOut
+    ##
+    ## In:  n.a.
+    ## Out: Log Message
+    ## Ret: 127
+    ##
+    ## Synopsis: Errors out with a messsage
+    ##
+    ## Usage: BailOut "<message>"
+    ##
+    ## Description:
+    ##
+    ##    From script, exits 127
+    ##    In shell, returns 127
+    ##
+    ##    Turns Console Volume up high to ensure message is seen.
+    ##
+    ## Workings:
+    #
+     LogIt "I must say that I must leave. ($OFA_WHICHSCRIPT talking)"
+     VolMax
+     if [[ ${#} -lt 1 ]];then
+         LogError "$OFA_WHICHSCRIPT bailed out"
+     else
+         LogError "$OFA_WHICHSCRIPT: $@"
+     fi
+     VolMin
+     if IsScript
+     then
+         LogError "exiting 127"
+         exit 127;
+     else
+         LogError "returning 127"
+         return 127 
+     fi
+  }
+
+  function ExitGently {
+    #
+    ## Name: ExitGently
+    ##
+    ## In:  n.a.
+    ## Out: Log message
+    ## Ret: 0
+    ##
+    ## Synopsis: logs message and quits 0
+    ##
+    ## Usage: ExitGently "<message>"
+    ##
+    ## Description:
+    ##
+    ##    From a script, exits 0
+    ##    In shell, returns 0
+    ##
+    ## Workings:
+    ##
+    ##    <Description of how it works>
+    #
+      VolSet 1
+      OFA_TRAP_XIT="" 
+      typeset MSG=${1:-"Cordialement ($(WhichScript))"}
+      echo  "$MSG" | LogCartRidge
+      if [[ $OFA_WHOSTALKING = $USER ]];then
+          VolUp
+          return 0
+      else
+          VolUp
+          exit 0;
+      fi
+  }
+
+  function Tmsp {
+    #
+    ## Name: Tmsp
+    ##
+    ## In:  n.a.
+    ## Out: string to stdout
+    ## Ret: 0
+    ##
+    ## Synopsis: echo rime stamp
+    ##
+    ## Usage: my_var=$(Tmsp)
+    ##
+    ## Description:
+    ##
+    ##    Used by functions, esp. LogIt.
+    #
+      date "+%Y_%m_%d_%H%M%S"
+  }
+
+  function LogWarning {
+    #
+    ## Name: LogWarning
+    ##
+    ## In:  n.a.
+    ## Out: string
+    ## Ret: 0
+    ##
+    ## Synopsis: Loga a warning
+    ##
+    ## Usage: LogWarning ["<message>"]
+    ##
+    ## Description:
+    ##
+    ##   Logs input with "[$OFA_WRN]" pre-pended
+    ##
+    ## Workings:
+    ##
+    ##    Calls LogIt with "<message>"
+    #
+
+      VolUp 1
+      LogIt "[$OFA_WRN] $*"
+      VolDn 1
+  }
+
+  function LogError {
+    #
+    ## Name: LogError
+    ##
+    ## In:  n.a.
+    ## Out: string
+    ## Ret: 0
+    ##
+    ## Synopsis: Log an Error
+    ##
+    ## Usage: LogError ["<message>"]
+    ##
+    ## Description:
+    ##
+    ##   Logs input with "[$OFA_ERR]" pre-pended
+    ##   Uses LogCons to make sure message appear in console. 
+    ##
+    ## Workings:
+    ##
+    ##    Calls LogCons with "<message>"
+    #
+
+      LogCons "[$OFA_ERR:] $*"
+  }
+
+  function LogInfo {
+    #
+    ## Name: LogInfo
+    ##
+    ## In:  n.a.
+    ## Out: string
+    ## Ret: 0
+    ##
+    ## Synopsis: Log informative message
+    ##
+    ## Usage: LogInfo ["<message>"]
+    ##
+    ## Description:
+    ##
+    ##   Logs input with "[$OFA_INF]" pre-pended
+    ##
+    ## Workings:
+    ##
+    ##    Calls LogIt with "<message>"
+    #
+      LogIt "[$OFA_INF:] $*"
+  }
+
+  function LogCons {
+    #
+    ## Name: LogCons
+    ##
+    ## In:  n.a.
+    ## Out: string
+    ## Ret: 0
+    ##
+    ## Synopsis: Log to console
+    ##
+    ## Usage: LogCons ["<message>"]
+    ##
+    ## Description:
+    ##
+    ##   Logs input with Volume turned up high.
+    ##
+    ## Workings:
+    ##
+    ##    Calls LogIt with high console output volume,
+    #
+
+      VolUp 999
+      LogIt "$*"
+      VolPrv
+  }
+
+  function VolMin {
+    #
+    ## Name: VolMin
+    ##
+    ## In:  n.a.
+    ## Out: n.a.
+    ## Ret: 0
+    ##
+    ## Synopsis: Turn console output volume down drastically
+    ##
+    ## Usage: VolMin
+    ##
+    ## Description:
+    ##
+    ##   Complement of VolMax
+    ##   Makes the environment very silent.
+    #
+
+      let OFA_CONS_VOL-=1000
+  }
+
+  function VolMax {
+    #
+    ## Name: VolMax
+    ##
+    ## In:  n.a.
+    ## Out: n.a.
+    ## Ret: 0
+    ##
+    ## Synopsis: Turn console output volume up drastically
+    ##
+    ## Usage: VolMax
+    ##
+    ## Description:
+    ##
+    ##   Complement of VolMin
+    ##   Makes the environment very verbose.
+    #
+      VolSet 1000
+  }
+
+  function VolUp {
+    #
+    ## Name: VolUp
+    ##
+    ## In:  n.a.
+    ## Out: n.a.
+    ## Ret: 0
+    ##
+    ## Synopsis: Turn console output volume up by <n> or 1 (default)
+    ##
+    ## Usage: VolUp [<n>]
+    ##
+    ## Description:
+    ##
+    ##   Complement of VolDn
+    ##   Makes the environment that much more verbose.
+    ## 
+    ##   Tips:
+    ##   =====
+    ##   In functions
+    ##    - Make a function stand out with higher verbosity when "volum" is decreased. 
+    ##    - revert using VolUp when done
+    ## 
+    ##   Alias: "vu"
+    #
+
+      _OFA_CONS_VOL_PREV=$OFA_CONS_VOL
+      if [[ ${#} -eq 0 ]] 
+      then
+          let OFA_CONS_VOL+=1
+      else
+          typeset _CNT=${1}
+          while [[ $_CNT -gt 0 ]];do
+              let OFA_CONS_VOL+=1
+              let _CNT-=1
+          done
+      fi
+      return 0
+  }
+
+
+  function VolDn {
+    #
+    ## Name: VolDn
+    ##
+    ## In:  n.a.
+    ## Out: n.a.
+    ## Ret: 0
+    ##
+    ## Synopsis: Turn console output volume down by <n> or 1 (default)
+    ##
+    ## Usage: VolDn [<n>]
+    ##
+    ## Description:
+    ##
+    ##   Complement of VolUp
+    ##   Makes the environment that much less verbose.
+    ## 
+    ##   Tips:
+    ##   =====
+    ##   In scripts 
+    ##    - Use to mute "normal" LogIt output.
+    ##    - where needed, produce console ouput using LogCons
+    ##   In functions
+    ##    - turn a functions verbosity down (LogIt amounts to "debug" message)
+    ##    - revert using VolUp when done
+    ##
+    ##   Alias: "vd"
+    #
+
+      _OFA_CONS_VOL_PREV=$OFA_CONS_VOL
+      if [[ ${#} -eq 0 ]] 
+      then
+          let OFA_CONS_VOL-=1
+      else
+          typeset _CNT=${1}
+          while [[ $_CNT -gt 0 ]];do
+              let OFA_CONS_VOL-=1
+              let _CNT-=1
+          done
+      fi
+      return 0
+  }
+
+
+function IsInteger {
+  #
+  ## Name: <file or function name>
+  ##
+  ## In:  <input>
+  ## Out: <output>
+  ## Ret: <return values>
+  ##
+  ## Synopsis: <short description of purpose and effect>
+  ##
+  ## Usage: <"Usage" text>
+  ##
+  ## Description:
+  ##
+  ##    <All useful explanatory text.>
+  ##
+  ## Workings:
+  ##
+  ##    <Description of how it works>
+  #
+
+     echo $1 | sed 's/^[+-]//'|egrep "^[$_DIGIT_][$_DIGIT_]*$" >/dev/null
+}
+
+
+  function VolSet {
+    #
+    ## Name: VolSet
+    ##
+    ## In:  n.a.
+    ## Out: n.a.
+    ## Ret: 0
+    ##
+    ## Synopsis: Sets console output volume to absolute value
+    ##
+    ## Usage: VolSet [<n>]
+    ##
+    ## Description:
+    ##
+    ##   Useful to revert to 1 (default) or 0 (script mode)
+    ## 
+    ##   Aliases
+    ##   =======
+    ##   v0 => VolSet 0
+    ##   v1 => VolSet 1
+    #
+      if [[ $# -eq 1 ]] 
+      then
+          _OFA_CONS_VOL_PREV=$OFA_CONS_VOL
+          ! IsInteger $1 \
+          && LogWarning "not an integer: \"$1\"" \
+          && return 1 \
+          || OFA_CONS_VOL=$1
+      else
+          LogCons "Current volume is $OFA_CONS_VOL"
+      fi
+      return 0
+  }
+
+  function VolLvl {
+    #
+    ## Name: VolLvl
+    ##
+    ## In:  Value read from variable
+    ## Out: Log message (LogIt)
+    ## Ret: 0
+    ##
+    ## Synopsis: Displays message indicating current level of verbosity.
+    ##
+    ## Usage: VolLvl
+    ##
+    ## Description:
+    ##
+    ##   Useful to revert to 1 (default) or 0 (script mode)
+    ##
+    ##   Aliases
+    ##   =======
+    ##   vl 
+    #
+      LogIt Verbose Level is ${OFA_CONS_VOL}
+  }
+
+  function VolPrv {
+    #
+    ## Name: VolPrv
+    ##
+    ## In:  environment variable $_OFA_CONS_VOL_PREV
+    ## Out: environment variable $OFA_CONS_VOL
+    ## Ret: 0
+    ##
+    ## Synopsis: Sets OFA_CONS_VOL back to previous value
+    ##
+    ## Usage: VolPrv
+    ##
+    ## Description:
+    ##
+    ##   Switch back after temporarily setting OFA_CONS_VOL 
+    ##   via VolUp, VolDn or VolSet
+    ##
+    #
+      OFA_CONS_VOL=$_OFA_CONS_VOL_PREV
+  }
+
+  function LogLineCount {
+    #
+    ##
+    ## Name: LogLineCount
+    ##
+    ## In:  log file
+    ## Out: integer on stdout
+    ## Ret: 0|1
+    ##
+    ## Synopsis: echoes nb of lines in $LOGFILE
+    ##           If no $LOGFILE, echoes -1 and returns 1
+    ##
+    ## Usage: LogLineCount
+    ##
+    ##   ex.: OFFSET=$(LogLineCount)
+    ##
+    ## Description:
+    ##
+    ##    Useful when repeatedly calling Probe4Error or Probe4Warning, 
+    ##    to avoid running over the whole log each time. 
+    #
+      [[ ! -r "$LOGFILE" ]] \
+      && echo "-1" \
+      && return 1  \
+      || awk 'END{print NR}' $LOGFILE
+  }
+
+  function LogOffSet {
+    #
+    ## Name: LogOffSet
+    ##
+    ## In:  log file
+    ## Out: Assignment of LOG_OFFSET
+    ## Ret: 0|1
+    ##
+    ## Synopsis: assigns current line count of $LOGFILE to LOG_OFFSET
+    ##
+    ## Usage: LogOffSet
+    ##
+    ## Description:
+    ##
+    #
+      LOG_OFFSET=$(LogLineCount)
+  }
+
+  # ==============================================================================
+  # == functions: mailing
+  # ==============================================================================
+
+  function MailPreMatureExit {
+    #
+    ## - Logs Error "PREMATURE EXIT"
+    ## - Calls LogChecker with mail
+    ## See "LogChecker"
+    #
+      MAIL_FLG=1
+      LogError "PREMATURE EXIT"
+      LogChecker "$1" "$2"
+  }
+
+  function PreMatureExit {
+    #
+    ## - Logs Error "PREMATURE EXIT"
+    ## - Calls LogChecker without mail
+    ## See "LogChecker"
+    #
+      MAIL_FLG=0
+      LogError "PREMATURE EXIT"
+      LogChecker "$1" "$2"
+  }
+
+  function MailLogReport {
+    #
+    ## Calls LogChecker with mail
+    ## See "LogChecker"
+    #
+      MAIL_FLG=1
+      LogChecker "$1" "$2"
+  }
+
+  function LogReport {
+    #
+    ## Calls LogChecker without mail
+    ## See "LogChecker"
+    #
+      MAIL_FLG=0
+      LogChecker "$1" "$2"
+  }
+
+  function LogChecker {
+    #
+    ##
+    ## Name: LogChecker alias LogReport alias MailLogReport
+    ##
+    ## Synopsis: Check LOGFILE and send mail (for use in scripts).
+    ##
+    ## IN: $LOGFILE
+    ## OUT: mail
+    ## RET: 0/1
+    ##
+    ## Usage: LogChecker (<message>|"") [<mail address (list)>]
+    ##        LogReport "<message>"
+    ##    MailLogReport "<message>" "<recipients>|<dummy>"
+    ##
+    ## Description:
+    ##
+    ##   Features
+    ##   ========
+    ##   Checks logfile for errors and produces a uniform report,
+    ##   comprised of a summary, an error report and a warnings report.
+    ##   Last bit of log file is tailed beneath reports.
+    ##
+    ##   Mail subject contains status, program name, user, machine and message.
+    ##   Other than <message>, none of this requires any arguments or other input,
+    ##   only variable adjustments when the "ofa" defaults won't suffice.
+    ##
+    ##   Scripting Tips:
+    ##   ===============
+    ##   - best called using a 'trap' pragma.
+    ##   - use numbered steps in <message>, plus short description of current step.
+    ##
+    ## Workings:
+    ##
+    ##   Standard Variables
+    ##   ==================
+    ##   This function uses OFA_* standard variables thus:
+    ##
+    ##   - $LOGFILE          # Created automatically by LogStart function
+    ##   - OFA_MAIL_RCP_GOOD # used for success mail
+    ##   - OFA_MAIL_RCP_BAD  # used for failure mail
+    ##   - OFA_ENV_LABEL     # environment (DEV/TST/SIT/UAT/PRD/POC..), for mail.
+    ##   - OFA_APP_LABEL     # application label, for mail. Set in script config.
+    ##   - OFA_ERR_PAT       # If matched, status becomes $OFA_ERR
+    ##   - OFA_IGN_PAT       # ... unless this matches
+    ##   - OFA_WRN_PAT       # Only logs warnings but leaves status alone.
+    ##
+    ## Note:
+    ##   All standard variables have "reasonable" default values.
+    ##   These may be adjusted in the script's body or parameter files.
+    ##
+    #
+      set +x
+
+      typeset _RV=$?
+      typeset _MSG="$1"
+      typeset _RCP="$2"
+      typeset _TMSP=$(Tmsp)
+      typeset _TMPLOG=$OFA_TMP_DIR/MailLogFile.$$.$PPID.$_TMSP
+      typeset _TMPLOG_HEAD=$_TMPLOG.head
+      typeset _TMPLOG_ERR=$_TMPLOG.err
+      typeset _TMPLOG_WRN=$_TMPLOG.wrn
+      typeset _TMPLOG_TAIL=$_TMPLOG.tail
+      typeset _STATUS="$OFA_SUC"
+      typeset _SCRIPT=$(ScriptPath)
+
+      if [[ ! -n "$OFA_MAIL_PROG" ]] && [[ "$MAIL_FLG" = "1" ]]
+      then
+          LogWarning "No Mail Program available - mail canceled"
+          MAIL_FLG=0
+      fi
+
+    #
+    # If $LOGFILE is readable and $OFA_ERR_PAT non-void,
+    # perform error checking.
+    #
+      if [[ ! -r $LOGFILE ]] 
+      then
+          LogIt "(no \$LOGFILE)"
+          return 1
+      elif [[ ! -n "$OFA_ERR_PAT" ]]
+      then
+          LogIt "(no \$OFA_ERR_PAT)"
+          return 1
+      else
+        #
+        # check for errors and set STATUS
+        # --
+        #
+        # Search for error pattern in $LOGFILE:
+        #
+        # IGNORE:
+        # - Lines that are enclosed in pipes
+        #   (these are deemed report lines)
+        # - The string "OFA_ERR_PAT"
+        #   (name of variable that contains the error pattern,
+        #    may appear along with its contents during verification)
+        # - The pattern contained in "$OFA_IGN_PAT"
+        #
+        #
+          Probe4Error > $_TMPLOG_ERR
+
+          [[ $(cat $_TMPLOG_ERR|awk 'END{print NR}') -eq 0 ]] \
+              && echo "(no errors detected)" \
+              > $_TMPLOG_ERR
+        #
+        # Second, for status, rely on "no errors detected" being found
+        # in the temporary error log.
+        #
+          grep "no errors detected" $_TMPLOG_ERR 2>&1 >/dev/null \
+              && _STATUS="$OFA_SUC" \
+              || _STATUS="$OFA_ERR"
+        #
+        # Check for warnings
+        #
+        # IGNORE:
+        # - Lines that are enclosed in pipes
+        #   (these are deemed report lines)
+        # - The strings "OFA_WRN_PAT" and "OFA_ERR_PAT"
+        #
+          Probe4Warning > $_TMPLOG_WRN
+
+          [[ $(cat $_TMPLOG_WRN|awk 'END{print NR}') -eq 0 ]] \
+              && echo "(no warnings detected)" \
+              >  $_TMPLOG_WRN
+        #
+        # tail logfile
+        #
+          cat $LOGFILE | tail -$OFA_MAIL_LOG_TAIL    >> $_TMPLOG_TAIL
+      fi
+
+    #
+    ##   Determine mail recipients:
+    ##   ==========================
+    ##    - According to status, take "good" or "bad" list.
+    ##    - Either way, assign only if $_RCP (arg# 2) has no value.
+    #
+      [[ "$_STATUS" = "$OFA_SUC" ]]             \
+          && _RCP=${_RCP:-"$OFA_MAIL_RCP_GOOD"} \
+          || _RCP=${_RCP:-"$OFA_MAIL_RCP_BAD"}
+
+    #
+    # Mail/Summary Title
+    #
+      _TITLE="$OFA_ENV_LABEL - ${OFA_STATUS_MANUAL:-"$_STATUS"} - $OFA_APP_LABEL - $OFA_WHICHSCRIPT@$HOSTNAME: $_MSG"
+
+    #
+    # create header when all details are available
+    #
+      echo "Date:    $(Tmsp)"                       >> $_TMPLOG_HEAD
+      echo "MailTo:  ${_RCP}"                       >> $_TMPLOG_HEAD
+      echo "Logfile: $LOGFILE"                      >> $_TMPLOG_HEAD
+      echo "Server:  $HOSTNAME"                     >> $_TMPLOG_HEAD
+      echo "Script:  $(ScriptPath)"                 >> $_TMPLOG_HEAD
+      echo "Os user: $USER"                         >> $_TMPLOG_HEAD
+      # echo "Err.:    \"$OFA_ERR_PAT\""              >> $_TMPLOG_HEAD
+      # echo "No Err.: \"$OFA_IGN_PAT\""              >> $_TMPLOG_HEAD
+      # echo "Warn.:   \"$OFA_WRN_PAT\""              >> $_TMPLOG_HEAD
+      # echo "No Warn: \"$OFA_WRN_PAT_IGN\""          >> $_TMPLOG_HEAD
+      echo "Status:  ${OFA_STATUS_MANUAL:-"$_STATUS"}" >> $_TMPLOG_HEAD
+
+    #
+    # - Assemble files ("head", "err" and "tail") for mail text err
+    #
+      echo "$_TITLE" | CartRidge >> $_TMPLOG
+      cat $_TMPLOG_HEAD              | CartRidge >> $_TMPLOG
+      echo "Error report:"           | CartRidge >> $_TMPLOG
+      cat $_TMPLOG_ERR               | CartRidge >> $_TMPLOG
+      echo "Warnings report:"        | CartRidge >> $_TMPLOG
+      cat $_TMPLOG_WRN               | CartRidge >> $_TMPLOG
+      VolUp 10
+      IsVerbose && cat $_TMPLOG >&2
+      VolDn 10
+      echo "Log excerpt (last $OFA_MAIL_LOG_TAIL lines):"  >> $_TMPLOG
+      echo "...  "                                 >> $_TMPLOG
+      cat $_TMPLOG_TAIL                            >> $_TMPLOG
+
+    #
+    # - Append "head" and "err" of output to $LOGFILE (not "tail" which is but the last portion
+    #     of unprocessed lines from $LOGFILE, intended only for the mail err. We don't want to
+    #     re-log this to the same file.
+    #
+      echo "Error report:"           | CartRidge >> $LOGFILE
+      cat $_TMPLOG_ERR               | CartRidge >> $LOGFILE
+      echo "Warnings report:"        | CartRidge >> $LOGFILE
+      cat $_TMPLOG_WRN               | CartRidge >> $LOGFILE
+      echo "Summary of: \"$_TITLE\"" | CartRidge >> $LOGFILE
+      cat $_TMPLOG_HEAD              | CartRidge >> $LOGFILE
+      LogCons "Status: ${OFA_STATUS_MANUAL:-"$_STATUS"}"
+
+    ##
+    ##   Send mail:
+    ##   ==========
+    ##    - If $_RCP looks like a mail address, send mail
+    ##    - else, don't.
+    ##      This allows for override
+    ##       - with a fixed mail address
+    ##       - to inhibit mail by using a string like e.g. "no mail" or "!!!NO SPAM!!!"
+    #
+      [[ $MAIL_FLG = "1" ]] && [[ $_RCP = *"@"* ]] && $OFA_MAIL_PROG -s "$_TITLE" "$_RCP" < $_TMPLOG
+      rm -f $_TMPLOG $_TMPLOG_HEAD $_TMPLOG_ERR $_TMPLOG_WRN $_TMPLOG_TAIL
+
+    ##
+    ##   Return value:
+    ##   =============
+    ##   Status $OFA_SUC => 0
+    ##   Status $OFA_ERR => 1
+    #
+      [[ $_STATUS = "$OFA_SUC" ]] \
+          && return 0             \
+          || BailOut "Errors detected"
+
+  }
+
+  function Probe4Error {
+    #
+    ## Name: Probe4Error
+    ##
+    ## In:  $LOGFILE, $OFA_ERR_PAT, "$OFA_IGN_PAT
+    ## Out: matching strings from $LOGFILE
+    ## Ret: 0/1
+    ##
+    ## Synopsis: Probes for error in current logfile. 
+    ##
+    ## Usage: Probe4Error <offset>
+    ##
+    ## Description:
+    ##
+    ##    Excludes 
+    ##     - lines starting with a "|" (pipe), considered a formatted report
+    ##     - The STRING "OFA_ERR_PAT" (name of variable)
+    ##     - $OFA_IGN_PAT
+    ##
+    ## Workings:
+    ##
+    ##    Works from $LOGFILE or stdin.
+    ##    Returns the natural result of the last expression,
+    ##    i.e. returns 0 when errors were found.
+    ##
+    ## CAVEAT: hangs if given no input (i.e. until EOF a.k.a. ^D)
+    #
+      typeset OFFSET=${1:-"1"}
+
+      sed -n "$OFFSET,\$p" $LOGFILE \
+      | egrep -v "^ *\|"           \
+      | egrep -v "$OFA_IGN_PAT"    \
+      | grep  -v "OFA_ERR_PAT"     \
+      | egrep "$OFA_ERR_PAT"
+  }
+
+  function Probe4Warning {
+    #
+    ## Name: Probe4Warning
+    ##
+    ## In:  $LOGFILE, $OFA_WRN_PAT, $OFA_IGN_PAT, $OFA_WRN_PAT_IGN
+    ## Out: matching strings from $LOGFILE
+    ## Ret: 0/1
+    ##
+    ## Synopsis: Probes for warnings in current $LOGFILE or stdin. 
+    ##
+    ## Usage: Probe4Warning
+    ##
+    ## Description:
+    ##
+    ##    Excludes 
+    ##     - lines starting with a "|" (pipe), considered a formatted report
+    ##     - The STRING "OFA_WRN_PAT" (name of variable)
+    ##     - $OFA_IGN_PAT
+    ##
+    ## Workings:
+    ##
+    ##    Works from $LOGFILE or stdin.
+    ##    Returns the natural result of the last expression,
+    ##    i.e. returns 0 when warnings were found.
+    ##
+    ## CAVEAT: hangs if given no input (i.e. until EOF a.k.a. ^D)
+    ##
+    #
+      typeset OFFSET=${1:-"1"}
+
+      sed -n "$OFFSET,\$p" $LOGFILE  \
+      | egrep -v "^ *\|"            \
+      | grep -v "OFA_WRN_PAT"       \
+      | grep -v "OFA_ERR_PAT"       \
+      | egrep -v "$OFA_WRN_PAT_IGN" \
+      | egrep "$OFA_WRN_PAT"         
+  }
+  # ==============================================================================
+  # == functions: docsys
+  # ==============================================================================
+
+  function OfaOverView {
+    #
+    ## Name: OfaOverView
+    ##
+    ## In:  ofa files
+    ## Out: test to stdout
+    ## Ret: 0
+    ##
+    ## Synopsis: shows an overview documentation of the "ofa" environment
+    ##
+    ## Usage: ofa
+    ##
+    ## Description:
+    ##
+    ##    Entry point to the system. 
+    ##    Should allow anyone to make instant use of the environment.
+    ##    
+    ##    information shown:
+    ##    ==================
+    ##    - ofa makeup:      what there is, amounts and quantities
+    ##    - DB overview:     ofa DB standards, file sytems chart
+    ##    - Shell overview:  ofa shell standards
+    ##    - Functionality:   what it does
+    ##    - Documentation:   information usage
+    ##
+    ## Workings:
+    ##
+    ##    <Description of how it works>
+    #
+
+      OfaShowVersion
+      cat $OFA_DOC/ofa/OfaOverView.00.*.txt 2>/dev/null
+      cat $OFA_DOC/$OFA_GRAFT/OfaOverView.*.txt 2>/dev/null
+      cat $(ls -1 $OFA_DOC/ofa/OfaOverView.*.txt 2>/dev/null|egrep -v "\.00\.")
+  }
+
+  function OfaHelpOut {
+      OfaHelp "$@"
+      return 22
+  }
+
+  function OfaHelpLess {
+    #
+    ## Name: OfaHelpLess
+    ##
+    ## In:  Files 
+    ## Out: Text to stdout
+    ## Ret: 0
+    ##
+    ## Synopsis: Invokes OfaHelp with the "Less" function.
+    ##
+    ## Usage: OfaHelpLess <string>
+    ##
+    ## Description:
+    ##
+    ##    A wrapper around OfaHelp. 
+    ##
+    ## Alias: ofa
+    #
+
+      # OfaHelp $@ | Less
+      OfaHelp $@ | More
+  }
+
+  function OfaHelp {
+    #
+    ## Name: OfaHelp
+    ## 
+    ## Synopsis: ofa's self-documenting functionality
+    ##
+    ## Usage: 
+    ##    ofa                     # ofa overview
+    ##    ofa list                # display all variables, functions, alias and scripts
+    ##    ofa ofa                 # this screen
+    ##    ofa alias               # list all ofa alias
+    ##    ofa function            # list all ofa functions
+    ##    ofa variable            # list all ofa variables
+    ##    ofa script              # list all ofa scripts
+    ##    ofa [help] <anything> 	# ofa documentation on <anything>
+    #    
+      [[ ${#} -lt 1 ]] && (OfaDocHeaderWithStats && OfaOverView ) && return
+      [[ ${#} -eq 1 ]] && typeset _TOPIC=$1
+      [[ ${#} -eq 2 ]] && typeset _TOPIC=$1 && typeset _TOKEN=$2
+      [[ ${#} -gt 2 ]] && return 0
+      typeset _SOURCEFILE=""
+      if [[ $_TOPIC = "map" ]];then
+          cat $OFA_RESOURCE_MAP
+      elif [[ $_TOPIC = "doc" ]];then
+          cat $OFA_DOC/ofa/OfaOverView.02.Documentation.txt
+      elif [[ $_TOPIC = "env" ]];then
+          ShowResVars
+          ShowResPaths
+          ShowKeyVarsFromLoader
+      elif [[ $_TOPIC = "$OFA_GRAFT" ]];then
+          cat $OFA_DOC/$OFA_GRAFT/OfaOverView.*.txt 2>/dev/null || OfaHelp list $OFA_GRAFT
+      elif [[ -s "$_TOPIC" ]];then
+           OfaHelp help $_TOPIC
+      elif [[ $_TOPIC = "help" ]];then
+        #
+        # -- help
+        #
+          HorizontalBar
+          if [[ -s "$_TOKEN" ]];then
+            #
+            # a valid file path
+            #
+              (
+                  echo "Script:    $(basename $_TOKEN)"
+                  echo "File:      $_TOKEN"
+                  echo "File date: $(FileTime $_TOKEN)"
+              ) | CartRidge
+              if [[ -n "$(echo  $_TOKEN | egrep -i "SQL$")" ]]
+              then
+                  egrep -i "^ *\-\- *REM" $_TOKEN | sed 's@^ *\-\- *REM@@i'|InDent
+              else
+                  egrep "^ *\#\#" $_TOKEN | sed 's@^ *\#\#@@'|InDent
+              fi
+              HorizontalBar
+              echo ""
+          elif [[ -n $_TOKEN ]];then
+              echo " --  Ofa Documentation for $_TOKEN --"|InDent
+              typeset _TOKEN_SHORT="$(echo $_TOKEN|sed 's@\..*@@')"
+              typeset _TOKEN_SHORT="$(echo $_TOKEN|sed 's@\..*@@')"
+              if [[ "$(echo $_TOKEN|tr "[[:lower:]]" "[[:upper:]]")" != "$_TOKEN" ]] \
+              && [[ "$(echo $_TOKEN|tr "[[:upper:]]" "[[:lower:]]")" != "$_TOKEN" ]]
+              then
+                #
+                # CamelCase, hence by ofa convention, a function 
+                # 
+                  for _SOURCEFILE in $(egrep -l "^ *function  *$_TOKEN |^ *function  *$_TOKEN$" $OFA_FUNX_PATH x 2>/dev/null|head -1)  
+                  do
+                      (
+                          echo "Fonction:  $_TOKEN"
+                          echo "File:      $_SOURCEFILE"
+                          echo "File date: $(FileTime $_SOURCEFILE)"
+                      ) | CartRidge
+                      cat $_SOURCEFILE \
+                          | sed -n "/function  *$_TOKEN /,/^ *}/p" \
+                          | egrep "^ *##"                          \
+                          |sed 's/^ *##//'                         \
+                          |CartRidge
+                      HorizontalBar
+                      echo ""
+                  done
+                  [[ -n "$_SOURCEFILE" ]] && return 0
+              elif [[ "$(echo $_TOKEN|tr "[[:upper:]]" "[[:lower:]]")" = "$_TOKEN" ]]
+              then
+                #
+                # lowercase: c'est un script ou programme ou alias.
+                # Ou alors un mot cle correspondant a un objet ofa. 
+                #
+                  [[ "$_TOKEN" = "function" ]] && _ListFuncs   && return 0
+                  [[ "$_TOKEN" = "alias"    ]] && _ListAlias   && return 0
+                  [[ "$_TOKEN" = "variable" ]] && _ListVars    && return 0
+                  [[ "$_TOKEN" = "script"   ]] && _ListScripts && return 0
+                  [[ "$_TOKEN" = "url"      ]] && _ListDocURLs && return 0
+                # 
+                #  alias 
+                # 
+                  typeset _TOKEN_ALIASED="$(egrep "^ *alias  *${_TOKEN}=" $OFA_SETT_PATH $OFA_MY_SETT_PATH x 2>/dev/null | sed 's/^[^=][^=]*\=//')"
+                  if [[ -n "$_TOKEN_ALIASED" ]] && [[ -n "$(alias $_TOKEN)" ]]
+                  then 
+                    #
+                    # Bingo, c'est un alias. 
+                    # - re-invoquer la fonction avec le nom aliase
+                    #
+                      for _SOURCEFILE in $(egrep -l "^ *alias  *${_TOKEN}=" $OFA_SETT_PATH $OFA_MY_SETT_PATH x 2>/dev/null)  
+                      do 
+                          (
+                              echo "${_TOKEN}: alias $_TOKEN_ALIASED"
+                              echo "File:      $_SOURCEFILE"
+                              echo "File date: $(FileTime $_SOURCEFILE)"
+                          ) | CartRidge 
+                        #
+                        # clip after space 
+                        #
+                          _TOKEN_ALIASED="$(echo $_TOKEN_ALIASED|sed 's/"//g;s/  *.*//g')"
+                        #
+                        # avoid repeating output
+                        #
+                          [[ "$_TOKEN_ALIASED" != "$_TOKEN" ]] && eval OfaHelp $_TOKEN_ALIASED
+                      done
+                      [[ -n "$_SOURCEFILE" ]] && return 0
+                  else
+                    #
+                    # Pas un alias. 
+                    # Regarde si c'est un script ofa, i.e.
+                    #  - un repetoire sous $OFA_ETC
+                    #  - un fichier dans   $OFA_BIN ou $OFA_SCR
+                    # Dans ce cas, prendre en compte la documentation dans deux fichiers: 
+                    #  - Le script
+                    #  - Le fichier $OFA_ETC/*.defaults
+                    #
+                      _SOURCEFILE="$(ls -1 $OFA_BIN/${_TOKEN_SHORT}  $OFA_BIN/${_TOKEN} 2>/dev/null |head -1)"
+                      if [[ -f "$_SOURCEFILE" ]]
+                      then
+                        #
+                        #  - Display documentation
+                        #    1.- of the script
+                        #    2.- any relevant file resources
+                        #
+                           (
+                                echo "Script:    $(basename $_SOURCEFILE)"
+                                echo "File:      $_SOURCEFILE"
+                                echo "File date: $(FileTime $_SOURCEFILE)"
+                           ) | CartRidge
+                           (egrep "^ *##" $_SOURCEFILE || echo "(no doc)") \
+                               | sed 's/^ *##//' \
+                               | CartRidge
+
+                          if IsScript
+                          then
+                            #
+                            # When in a script, the complete list of relevant resource files is
+                            # readily available in the OFA_MY_SETT_PATH variable.
+                            #
+                              for _SOURCEFILE in $OFA_MY_SETT_PATH
+                              do
+                                  (
+                                     echo " -- Resource File -- "
+                                     echo "File:      $_SOURCEFILE"
+                                     echo "File date: $(FileTime $_SOURCEFILE)"
+                                  ) | CartRidge
+                                  (egrep "^ *##" $_SOURCEFILE||echo "(no doc)") \
+                                      | sed 's/^ *##//' \
+                                      | egrep -v "^ *#" \
+                                      | CartRidge
+                                  egrep -v "^ *##" $_SOURCEFILE \
+                                      | egrep "\="  \
+                                      | CartRidge
+                                  HorizontalBar
+                              done
+                          elif [[ -d $OFA_ETC/$_TOKEN_SHORT ]];then
+                            #
+                            # ok, not in a script. Use defaults file only.
+                            #
+                              for _SOURCEFILE in $(ls -1 $OFA_ETC/$_TOKEN_SHORT/${_TOKEN_SHORT}.defaults x 2>/dev/null| grep -v SAMPLE)
+                              do
+                                  (
+                                     echo "File:      $_SOURCEFILE"
+                                     echo "File date: $(FileTime $_SOURCEFILE)"
+                                  ) | CartRidge
+                                  (egrep "^ *##" $_SOURCEFILE||echo "(no doc)") \
+                                      | sed 's/^ *##//' \
+                                      | egrep -v "^ *#" \
+                                      | CartRidge
+                                  echo " -- Default variables for $_TOKEN --"|InDent
+                                  ( 
+                                      egrep -v "^ *##" $_SOURCEFILE | egrep "\=" \
+                                      || echo "(no default variables for $_TOKEN)"                        
+                                  ) | CartRidge
+                                  HorizontalBar
+                                  echo ""
+                              done
+                          fi
+                          [[ -n "$_SOURCEFILE" ]] && return 0
+                      elif [[ $(ls -1 $OFA_SQL/${_TOKEN_SHORT}.* 2>/dev/null|egrep -i "SQL$"|wc -l) -gt 0 ]];then
+                        #
+                        # It's a SQL script
+                        #
+                          for _SOURCEFILE in $(ls -1 $OFA_SQL/${_TOKEN_SHORT}* 2>/dev/null|egrep -i "SQL$");do
+                              (
+                                  echo "Script SQL: $(basename $_SOURCEFILE)"
+                                  echo "File:       $_SOURCEFILE"
+                                  echo "File date:  $(FileTime $_SOURCEFILE)"
+                              ) | CartRidge
+                              egrep -i "^ *\-\- *REM" $_SOURCEFILE | sed 's@^ *\-\- *REM@@i'|InDent
+                              HorizontalBar
+                              echo ""
+                          done
+                          [[ -n "$_SOURCEFILE" ]] && return 0
+                      fi
+                  fi
+              else
+                #
+                # All Uppercase: must be a variable
+                #
+                  if [[ $OFA_RESPATHS = *" $_TOKEN "* ]]
+                  then
+                      (
+                       LittleBanner "Variable: $_TOKEN"
+                       echo "File:      $_SOURCEFILE"
+                       echo "Current:   $(echo $(ShowVar $_TOKEN))"
+                      ) | CartRidge
+                      return 0
+                  else
+                      for FQFP_NUM_PAIR in $(
+                           egrep -n " *${_TOKEN}=| *export  *${_TOKEN}=" $OFA_SETT_PATH $OFA_MY_SETT_PATH $OFA_ETC/ofa/0fa_load.rc 2>/dev/null \
+                           | egrep -v "^ *#" \
+                           | sed "s/\=.*//;s/export //;s@[${_SPACE_}]@@g"
+                      );
+                      do
+                          LN="$(echo $FQFP_NUM_PAIR|cut -d":" -f2)"
+                          _SOURCEFILE="$(echo $FQFP_NUM_PAIR|cut -d":" -f1)"
+                         (
+                          LittleBanner "Variable:  $_TOKEN"
+                          echo "File:      $_SOURCEFILE"
+                          echo "Line:      $LN"
+                          echo "Assigned:  $(sed -n "s/#.*//;${LN}p" $_SOURCEFILE)"
+                          echo "File date: $(FileTime $_SOURCEFILE)"
+                          echo "Current:   $(echo $(ShowVar $_TOKEN))"
+                         ) | CartRidge
+                      done 
+                      [[ -n "$_SOURCEFILE" ]] && return 0
+                  fi
+              fi
+              LittleBanner "Suggestions"
+              OfaHelp list \
+                   | egrep -i "$_TOKEN" \
+                  || echo "    (no suggestion)"; HorizontalBar
+              HorizontalBar
+          else
+              OfaOverView
+              return 0
+          fi
+      elif [[ $_TOPIC = "list" ]];then
+        #
+        # -- list
+        #
+         (
+             _HIT=0
+             FILTER=${2:-"."}
+             (
+              _ListAlias 
+              _ListFuncs 
+              _ListVars 
+              _ListDocURLs 
+              _ListScripts 
+             ) | egrep  -i "$FILTER" && _HIT=1
+              if [[ $_HIT -eq 0 ]]
+              then
+                  LittleBanner "Ofa Online Documentation"
+                  echo "  ofa help"
+              fi
+         )
+          return 0
+      else
+        #
+        # -- last resort: help
+        #
+          OfaHelp help $_TOPIC
+      fi
+  }
+
+  function _ListAlias {
+    #
+    # -- affiche les alias depuis $OFA_IA_SETTINGS
+    #
+      LittleBanner  "Alias"
+      egrep -h "^ *alias  *[${_ALPHA_}]" $OFA_SETT_PATH $OFA_MY_SETT_PATH x 2>/dev/null \
+      | sed "s/=.*//;s/^ *alias/    Alias:/" \
+      | sort | CartRidge
+  }
+
+  function _ListFuncs {
+    #
+    # -- Diplay functions
+    #    - blank out functions named "_<name>" (they're "internal")
+    #    - de-duplicate (some are re-defined)
+    #
+      LittleBanner "Fonctions"
+      egrep -h "^ *function" $OFA_FUNX_PATH $OFA_MY_FUNX_PATH x 2>/dev/null \
+      | grep -v " _" \
+      | sed "s@^ *@    @;s@{.*@@;s/function/Function:/" \
+      | sort -u  | CartRidge
+  }
+
+  function _ListVars {
+    #
+    # -- affiche les variables depuis $OFA_STD_SETTINGS
+    #
+      LittleBanner "Variables"
+     (
+      egrep -vh "^ *#" $OFA_SETT_PATH $OFA_MY_SETT_PATH $OFA_ETC/ofa/0fa_load.rc 2>/dev/null \
+      | grep "="                       \
+      | sed 's@^ *export  *@@;s@=.*@@' \
+      | egrep -v "line|alias |\\$"     \
+      | awk '{print $NF}'              \
+      | sort -u                        \
+      | sed 's@^ *@    Variable: @'    
+      for i in $OFA_RESPATHS 
+      do
+          echo "    Variable: $i"
+      done
+     ) | CartRidge
+  }
+
+  function _ListDocURLs {
+    #
+    # -- affiche les URLs de documentation
+    #
+      LittleBanner  "Documentation URLs"
+      echo "    URL $OFA_DOC_URL"
+      echo "    URL $OFA_SCRIPT_GUIDE_URL"
+  }
+
+  function _ListScripts {
+      LittleBanner  "\"ofa-style\" scripts"
+      for _i in $(ls -1d $OFA_ETC/*);do   # */ <-- "*/" for syntax colouring
+          if [[ -d $_i ]]; then
+              i=$(basename $_i)
+              for script in $(ls -1 $OFA_BIN/${i}.* $OFA_BIN/ofa/${i}.*  2>/dev/null);do
+                  echo "Script: $(basename $script)"
+              done
+          fi
+      done | CartRidge
+  }
+
+  function OfaBonJour {
+      #
+      #  OfaBonJour
+      ## 
+      ## Affiche le cartouche d'accueil
+      ##
+      OfaShowVersion
+      cat $OFA_DOC/$OFA_GRAFT/OfaBonJour.$OFA_GRAFT.txt 2>/dev/null
+  }
+
+  function UsageExit1 {
+      VolUp
+      [[ $OFA_CONS_VOL -ge 0 ]] && OfaHelp $OFA_WHICHSCRIPT
+      LogCons "$@"
+      exit 1
+  }
+
+  function Usage {
+      VolUp
+      [[ $OFA_CONS_VOL -ge 0 ]] && OfaHelp $OFA_WHICHSCRIPT
+      LogCons "$@"
+      ExitGently
+  }
+
+function OfaStatsCountAll {
+    cat $(Paths $@) /dev/null \
+    | awk 'END{print NR}'     \
+    ;
+}
+
+function OfaStatsCountOfaDoc {
+    cat $(Paths $@) /dev/null      \
+    | sed -n "/^[${_SPACE_}]*##/p" \
+    | awk 'END{print NR}'          \
+    ;
+}
+
+function OfaStatsCountCodeCommentShell {
+    cat $(Paths $@) /dev/null                         \
+    | sed -n "/^[${_SPACE_}]*##/d;/^[${_SPACE_}]*#/p" \
+    | awk 'END{print NR}'                             \
+    ;
+}
+
+function OfaStatsCountEmpty {
+    cat $(Paths $@) /dev/null     \
+    | sed -n "/^[${_SPACE_}]*$/p" \
+    | awk 'END{print NR}'         \
+    ;
+}
+
+function OfaStatsCountNonEmpty {
+    cat $(Paths $@) /dev/null  \
+    | sed "/^[${_SPACE_}]*$/d" \
+    | awk 'END{print NR}'      \
+    ;
+}
+
+function OfaStatsCountCodeShell {
+    cat $(Paths $@) /dev/null                     \
+    | sed "/^[${_SPACE_}]*$/d;/^[${_SPACE_}]*#/d" \
+    | awk 'END{print NR}'                         \
+    ;
+}
+
+function OfaStatsCountCodeSQL {
+    cat $(Paths $@) /dev/null                                             \
+    | tr "[:lower:]" "[:upper:]"                                          \
+    | sed "/^[${_SPACE_}]*$/d;/^[${_SPACE_}]*REM/d;/^[${_SPACE_}]*\-\-/d" \
+    | awk 'END{print NR}'                                                 \
+    ;
+}
+
+function OfaStatsCountCodeCommentSQL {
+    cat $(Paths $@) /dev/null                                                \
+    | tr "[:lower:]" "[:upper:]"                                             \
+    | sed -n "/^[${_SPACE_}]*$/d;/^[${_SPACE_}]*REM/p;/^[${_SPACE_}]*\-\-/p" \
+    | awk 'END{print NR}'                                                    \
+    ;
+}
+
+function OfaStats { 
+
+    _COR_BIN_FILES=$(find -L $OFA_BIN/ofa -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$")
+    _COR_DOC_FILES=$(find -L $OFA_DOC/ofa -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$")
+    _COR_ETC_FILES=$(find -L $OFA_ETC/ofa -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$")
+    _COR_FCT_FILES=$(find -L $OFA_FCT/ofa -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$")
+    _COR_SQL_FILES=$(find -L $OFA_SQL/ofa -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$")
+
+    _USR_BIN_FILES=$(find -L $OFA_BIN     -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$" | grep -v $OFA_BIN/ofa)
+    _USR_DOC_FILES=$(find -L $OFA_DOC     -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$" | grep -v $OFA_DOC/ofa)
+    _USR_ETC_FILES=$(find -L $OFA_ETC     -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$" | grep -v $OFA_ETC/ofa)
+    _USR_FCT_FILES=$(find -L $OFA_FCT     -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$" | grep -v $OFA_FCT/ofa)
+    _USR_SQL_FILES=$(find -L $OFA_SQL     -type f 2>/dev/null| egrep -v ".tar$|.tgz$|.zip$" | grep -v $OFA_SQL/ofa)
+
+    _COR_BIN_NB_FILES="$(echo "$_COR_BIN_FILES" | awk 'END{print NR}')"
+    _COR_DOC_NB_FILES="$(echo "$_COR_DOC_FILES" | awk 'END{print NR}')"
+    _COR_ETC_NB_FILES="$(echo "$_COR_ETC_FILES" | awk 'END{print NR}')"
+    _COR_FCT_NB_FILES="$(echo "$_COR_FCT_FILES" | awk 'END{print NR}')"
+    _COR_SQL_NB_FILES="$(echo "$_COR_SQL_FILES" | awk 'END{print NR}')"
+
+    _USR_BIN_NB_FILES="$(echo "$_USR_BIN_FILES" | awk 'END{print NR}')"
+    _USR_DOC_NB_FILES="$(echo "$_USR_DOC_FILES" | awk 'END{print NR}')"
+    _USR_ETC_NB_FILES="$(echo "$_USR_ETC_FILES" | awk 'END{print NR}')"
+    _USR_FCT_NB_FILES="$(echo "$_USR_FCT_FILES" | awk 'END{print NR}')"
+    _USR_SQL_NB_FILES="$(echo "$_USR_SQL_FILES" | awk 'END{print NR}')"
+
+    let _GLO_BIN_NB_FILES=$_COR_BIN_NB_FILES+$_USR_BIN_NB_FILES
+    let _GLO_DOC_NB_FILES=$_COR_DOC_NB_FILES+$_USR_DOC_NB_FILES
+    let _GLO_ETC_NB_FILES=$_COR_ETC_NB_FILES+$_USR_ETC_NB_FILES
+    let _GLO_FCT_NB_FILES=$_COR_FCT_NB_FILES+$_USR_FCT_NB_FILES
+    let _GLO_SQL_NB_FILES=$_COR_SQL_NB_FILES+$_USR_SQL_NB_FILES
+
+    let _USR_ALL_NB_FILES=$_USR_FCT_NB_FILES+$_USR_ETC_NB_FILES+$_USR_BIN_NB_FILES+$_USR_DOC_NB_FILES+$_USR_SQL_NB_FILES
+    let _COR_ALL_NB_FILES=$_COR_FCT_NB_FILES+$_COR_ETC_NB_FILES+$_COR_BIN_NB_FILES+$_COR_DOC_NB_FILES+$_COR_SQL_NB_FILES
+    let _GLO_ALL_NB_FILES=$_USR_ALL_NB_FILES+$_COR_ALL_NB_FILES
+
+    _COR_ALL________COUNT=$(OfaStatsCountAll              _COR_FCT_FILES _COR_ETC_FILES _COR_BIN_FILES _COR_DOC_FILES _COR_SQL_FILES)
+    _COR_CODE_SHELL_COUNT=$(OfaStatsCountCodeShell        _COR_FCT_FILES _COR_ETC_FILES _COR_BIN_FILES)
+    _COR_CODE_SQL___COUNT=$(OfaStatsCountCodeSQL          _COR_SQL_FILES)
+    _COR_COMM_SHELL_COUNT=$(OfaStatsCountCodeCommentShell _COR_FCT_FILES _COR_ETC_FILES _COR_BIN_FILES)
+    _COR_COMM_SQL___COUNT=$(OfaStatsCountCodeCommentSQL   _COR_SQL_FILES)
+    _COR_CODE_DOC___COUNT=$(OfaStatsCountOfaDoc           _COR_FCT_FILES _COR_ETC_FILES _COR_BIN_FILES)
+    _COR_EXTRA_DOC__COUNT=$(OfaStatsCountNonEmpty         _COR_DOC_FILES)
+    _COR_VOID_______COUNT=$(OfaStatsCountEmpty            _COR_FCT_FILES _COR_ETC_FILES _COR_BIN_FILES _COR_DOC_FILES _COR_SQL_FILES)
+
+    _USR_ALL________COUNT=$(OfaStatsCountAll              _USR_FCT_FILES _USR_ETC_FILES _USR_BIN_FILES _USR_DOC_FILES _USR_SQL_FILES)
+    _USR_CODE_SHELL_COUNT=$(OfaStatsCountCodeShell        _USR_FCT_FILES _USR_ETC_FILES _USR_BIN_FILES)
+    _USR_CODE_SQL___COUNT=$(OfaStatsCountCodeSQL          _USR_SQL_FILES)
+    _USR_COMM_SHELL_COUNT=$(OfaStatsCountCodeCommentShell _USR_FCT_FILES _USR_ETC_FILES _USR_BIN_FILES)
+    _USR_COMM_SQL___COUNT=$(OfaStatsCountCodeCommentSQL   _USR_SQL_FILES)
+    _USR_CODE_DOC___COUNT=$(OfaStatsCountOfaDoc           _USR_FCT_FILES _USR_ETC_FILES _USR_BIN_FILES)
+    _USR_EXTRA_DOC__COUNT=$(OfaStatsCountNonEmpty         _USR_DOC_FILES)
+    _USR_VOID_______COUNT=$(OfaStatsCountEmpty            _USR_FCT_FILES _USR_ETC_FILES _USR_BIN_FILES _USR_DOC_FILES _USR_SQL_FILES)
+
+    let _GLO_CODE_SHELL_COUNT=$_COR_CODE_SHELL_COUNT+$_USR_CODE_SHELL_COUNT
+    let _GLO_CODE_SQL___COUNT=$_COR_CODE_SQL___COUNT+$_USR_CODE_SQL___COUNT
+    let _GLO_COMM_SHELL_COUNT=$_COR_COMM_SHELL_COUNT+$_USR_COMM_SHELL_COUNT
+    let _GLO_COMM_SQL___COUNT=$_COR_COMM_SQL___COUNT+$_USR_COMM_SQL___COUNT
+    let _GLO_CODE_DOC___COUNT=$_COR_CODE_DOC___COUNT+$_USR_CODE_DOC___COUNT
+    let _GLO_EXTRA_DOC__COUNT=$_COR_EXTRA_DOC__COUNT+$_USR_EXTRA_DOC__COUNT
+    let _GLO_VOID_______COUNT=$_COR_VOID_______COUNT+$_USR_VOID_______COUNT
+    let _GLO_ALL________COUNT=$_COR_ALL________COUNT+$_USR_ALL________COUNT
+
+}
+
+  function OfaDocHeaderWithStats {
+      eval OfaStats
+      FrameTop
+      FramePair "The OFA environment" "is comprised of"  
+      FrameBar
+      FramePair "Nb. of Files:"    "$(printf "%6s %6s   (%6s)" "Core" "Graft"  "Global")"
+      FrameBar
+      FramePair "Scripts: "       "$(printf "%6d %6d   (%6d)" "$_COR_BIN_NB_FILES" "$_USR_BIN_NB_FILES"  "$_GLO_BIN_NB_FILES")"
+      FramePair "Documentation: " "$(printf "%6d %6d   (%6d)" "$_COR_DOC_NB_FILES" "$_USR_DOC_NB_FILES"  "$_GLO_DOC_NB_FILES")"
+      FramePair "Settings: "      "$(printf "%6d %6d   (%6d)" "$_COR_ETC_NB_FILES" "$_USR_ETC_NB_FILES"  "$_GLO_ETC_NB_FILES")"
+      FramePair "Function Libs: " "$(printf "%6d %6d   (%6d)" "$_COR_FCT_NB_FILES" "$_USR_FCT_NB_FILES"  "$_GLO_FCT_NB_FILES")"
+      FramePair "SQL Scripts: "   "$(printf "%6d %6d   (%6d)" "$_COR_SQL_NB_FILES" "$_USR_SQL_NB_FILES"  "$_GLO_SQL_NB_FILES")"
+      FramePair "Overall: "       "$(printf "%6d %6d   (%6d)" "$_COR_ALL_NB_FILES" "$_USR_ALL_NB_FILES"  "$_GLO_ALL_NB_FILES")"
+      FrameBar
+      FramePair "Nb. of Lines:"    "$(printf "%6s %6s   (%6s)" "Core" "Graft"  "Global")"
+      FrameBar
+      FramePair "Shell Code&Env: " "$(printf "%6d %6d   (%6d)" "$_COR_CODE_SHELL_COUNT" "$_USR_CODE_SHELL_COUNT"  "$_GLO_CODE_SHELL_COUNT")"
+      FramePair "SQL   Code    : " "$(printf "%6d %6d   (%6d)" "$_COR_CODE_SQL___COUNT" "$_USR_CODE_SQL___COUNT"  "$_GLO_CODE_SQL___COUNT")"
+      FramePair "Shell Comments: " "$(printf "%6d %6d   (%6d)" "$_COR_COMM_SHELL_COUNT" "$_USR_COMM_SHELL_COUNT"  "$_GLO_COMM_SHELL_COUNT")"
+      FramePair "SQL   Comments: " "$(printf "%6d %6d   (%6d)" "$_COR_COMM_SQL___COUNT" "$_USR_COMM_SQL___COUNT"  "$_GLO_COMM_SQL___COUNT")"
+      FramePair "In-Script Doc : " "$(printf "%6d %6d   (%6d)" "$_COR_CODE_DOC___COUNT" "$_USR_CODE_DOC___COUNT"  "$_GLO_CODE_DOC___COUNT")"
+      FramePair "Extra  Doc    : " "$(printf "%6d %6d   (%6d)" "$_COR_EXTRA_DOC__COUNT" "$_USR_EXTRA_DOC__COUNT"  "$_GLO_EXTRA_DOC__COUNT")"
+      FramePair "Void  Lines   : " "$(printf "%6d %6d   (%6d)" "$_COR_VOID_______COUNT" "$_USR_VOID_______COUNT"  "$_GLO_VOID_______COUNT")"
+      FramePair "Overall       : " "$(printf "%6d %6d   (%6d)" "$_COR_ALL________COUNT" "$_USR_ALL________COUNT"  "$_GLO_ALL________COUNT")"
+      FrameBar
+      FramePair "-- Amounting to"             "--"
+      FrameBar
+      FramePair "$(OfaHelp function|awk 'END{print NR}')" "Functions"
+      FramePair "$(OfaHelp variable|awk 'END{print NR}')" "Variables"
+      FramePair "$(OfaHelp alias   |awk 'END{print NR}')" "Aliases"
+      FrameBar
+      FramePair "Documentation"         "URLs:"
+      FrameBot
+      echo "    $OFA_DOC_URL"
+      echo "    $OFA_SCRIPT_GUIDE_URL"
+  }
+
+  function OfaShowVersion {
+    #
+    ## Name: OfaShowVersion
+    ##
+    ## In:  flat files
+    ## Out: text on stdout
+    ## Ret: n.a.
+    ##
+    ## Synopsis: display version information
+    ##
+    ## Usage: OfaShowVersion
+    ##
+    ## Description:
+    ##
+    ##    Version information is created outside versoin control.
+    ##    Information is created by the bundle_ofa.sh script (ofa:ofa)
+    ##    The bundle_ofa.sh script takes an md5 checksumm on the whole package. 
+    ##    If this sum is different from the previous checksum, the 
+    ##    "version number" (a reverse time stamp) is updated. 
+    ##    The "last checked" informatin is updated at every check.
+    ##
+    ## Workings:
+    ##
+    ##    <Description of how it works>
+    #
+      LittleBanner     "Version Information"
+      FrameTop
+      FramePair "OFA Version:" "$OFA_VERSION_TAG, build $OFA_VERSION"
+      FramePair "Build Date:" "$OFA_VERSION_LASTCHECK"
+      FramePair "Build Host:" "$OFA_VERSION_HOSTNAME"
+      FramePair "Md5 Checksum:" "$OFA_VERSION_MD5"
+      FramePair "Now running from:" "$OFA_BASE" 
+      FramePair "Graft Product:" "$OFA_GRAFT"    
+      FrameBot
+      VolDn 3
+      IsVerbose \
+        && LittleBanner "Latest Changes (prev. bundle)"    \
+        && cat $OFA_VERSION_CHANGED_FILES | CartRidge
+      VolDn
+      IsVerbose \
+        && LittleBanner "Local Changes" \
+        && find -L $OFA_BASE -type f -newer $OFA_VERSION_LASTCHECK_FILE -exec ls -lsd {} \;| egrep -v "VERSION|/logs/"|CartRidge
+      VolDn 
+      IsVerbose \
+        && LittleBanner "Change History"  \
+        && cat $OFA_VERSION_CHANGED_FILES_HIST | CartRidge
+      VolUp 5
+  }
+
+  function UnloadOfa {
+      cd $OFA_BASE_OLD 2>/dev/null || return
+      for file in $(Paths $(Path OFA_RESPATHS))
+      do
+          [[ ! -f "$file" ]] || [[ ! -r "$file" ]] && continue
+          for func in $(egrep "^ *function" $file | awk '{print $2}')
+          do
+              [[ $OFA_CONS_VOL -gt 1 ]] && echo "unsetting function $func" 1>&2
+              unset $func 2>/dev/null
+          done
+          for alias in $(egrep "^ *alias" $file | sed 's/=/ /' | awk '{print $2}')
+          do
+              [[ $OFA_CONS_VOL -gt 1 ]] && echo "unaliasing $alias" 1>&2
+              eval unalias $alias 2>/dev/null
+          done
+      done
+      for var in $(set | egrep "^ *OFA_" | sed 's/=/ /' | awk '{print $1}')
+      do
+          [[ "$var" = "OFA_ROOT" ]] && continue
+          [[ "$var" = "OFA_BASE_OLD" ]] && continue
+          [[ "$var" = "OFA_CONS_VOL" ]] && continue
+          [[ "$var" = "OFA_GRAFT" ]] && continue
+          [[ $OFA_CONS_VOL -gt 1 ]] && echo "unsetting variable $var" 1>&2
+          eval unset $var 2>/dev/null
+      done
+      [[ -n "OFA_BASE_OLD" ]] && OFA_BASE=$OFA_BASE_OLD
+      [[ -n "CDPATH_OLD"   ]] && CDPATH=$CDPATH_OLD
+      [[ -n "SQLPATH_OLD"  ]] && SQLPATH=$SQLPATH_OLD
+      [[ -n "PATH_OLD"     ]] && PATH=$PATH_OLD
+      ORACLE_PATH=$SQLPATH
+      alias ofa=". ~/*/local/$(id | sed 's/[()]/ /g' | awk '{print $2'})/etc/ofa/0fa_load.rc"
+      cd - 2>&1 >/dev/null
+      # echo "#-- (\"ofa\" unloaded) --#" 2>&1
+  }
+
+  function DeDup {
+    #
+    ## Name: DeDup
+    ##
+    ## In: arbitrary arguments
+    ## Out: The same arguments, de-duplicated
+    ## Ret: 0/1
+    ##
+    ## Removes Duplicates from a path variable
+    ## Like CleanPath, only it does not check directories
+    #
+    typeset RV=0
+    typeset BUF_IN="$@"
+    typeset BUF_OUT=""
+    echo $BUF_IN | grep ":" >/dev/null && SEPCH=":" || SEPCH=" "
+    typeset SEP=""
+    for i in $BUF_IN
+    do
+        echo "$BUF_OUT" | egrep "^$i$|^$i$SEP|$SEP$i$SEP|$SEP$i$" >/dev/null && continue
+        BUF_OUT="${BUF_OUT}${SEP}${i}"
+        SEP="$SEPCH"
+    done
+    echo $BUF_OUT
+  }
+
+
+  function DeDuPath {
+    #
+    ## Name: DeDuPath
+    ##
+    ## In: Name of variable containing colon-separated path
+    ## Out: assignment
+    ## Ret: 0/1
+    ##
+    ## Removes Duplicates from a path variable
+    ## by calling the DeDup function on its contents.
+    #
+    typeset RV=0  
+    eval $1=\"$(DeDup $(eval echo \$$1))\"
+  }
+
+  function RevPath {
+    #
+    ## Name: RevPath
+    ## 
+    ## In: Name of variable containing colon-separated path
+    ## Out: assignment
+    ## Ret: 0/1
+    ## 
+    ## Reverses path order
+    #
+    typeset RV=0
+    typeset PATH_NAME=$1
+    typeset TEMP_PATH=""
+    typeset SEP=""
+    for i in $(Path $PATH_NAME)
+    do
+        TEMP_PATH="${i}${SEP}${TEMP_PATH}"
+        SEP=":"
+    done
+    eval $PATH_NAME=$TEMP_PATH
+    [[ ! -n "$(eval echo $PATH_NAME)" ]] && RV=1
+    return $RV
+  }
+
+  function LogNDo {
+      LogIt "$@"
+      eval "$@"
+      RV=$?
+      [[ $RV -ne 0 ]] && LogError "Failed $@" 
+      return $RV
+  }
+
+  function LogNDoQ {
+      VolSet 0
+      LogNDo "$@"
+      RV=$?
+      VolPrv
+      return $RV
+  }
+
+  OFA_STD_FUNCTIONS_LOADED=1
+
+
+function Prompt {
+ #                                                      
+ ## Name: Prompt
+ ##                                                     
+ ## In:  Token + Message
+ ## Out: Variable Assignment
+ ## Ret: 0/1
+ ##                                                     
+ ## Synopsis: Prompts for a value
+ ##                                                     
+ ## Usage: Prompt ANS "What is the answer ? (Y|N|?) [Y]"
+ ##                                                     
+ ## Description:                                        
+ ##                                                     
+ ##    Assigns user input to variable given as $1. 
+ ##    Default value is supplied in message as [?].
+ ##                                                     
+ #                                                      
+    LOGFILE=${LOGFILE:-"/dev/null"}
+    typeset _ANS
+    typeset _RV
+    typeset _TOK="$1"
+    typeset _MESSAGE="$2"
+    [[ ! -n "$_MESSAGE" ]] && OfaHelp Prompt && return 1
+    if [[ -n $(echo $_MESSAGE | egrep "\[.*\]") ]]
+    then
+        _DFLT="$(echo $_MESSAGE | sed 's@.*\[@@;s@\].*@@')"
+    else
+        _DFLT=""
+    fi
+    printf "\n\t%s" "$_MESSAGE" | tee -a $LOGFILE
+    read _ANS
+    _ANS=${_ANS:-"$_DFLT"}
+    [[ -n "$_ANS" ]] && _RV=0 || _RV=1
+    eval $_TOK=\"$_ANS\"
+    echo $_TOK=\"$_ANS\" >> $LOGFILE
+    return $_RV
+}
+
+function ShowResVars {
+  #
+  ##  Name: ShowResVars
+  ##
+  ##  Synopsis: shows current vars from files in OFA_SETT_PATH and OFA_MY_SETT_PATH
+  ##
+  ##  Usage: ShowResVars
+  ##
+  ##  Description:
+  ##    - Runs ShowVar on all assigments found in the files
+  ##    - Appends output to LOGFILE, if applicable
+  #
+    LOGFILE=${LOGFILE:-"/dev/null"}
+    LittleBanner "*** Vars from Resource Paths ***" | LogCartRidge
+    for p in OFA_SETT_PATH OFA_MY_SETT_PATH
+    do
+        LittleBanner $p
+        for f in $(Path $p)
+        do
+            LongBanner $f
+            ShowVar $(
+                grep "=" $f \
+                | sed "
+                    /^[${_SPACE_}]*#/d;
+                    /alias[${_SPACE_}]/d;
+                    /=[${_SPACE_}]/d;
+                    s/export[${_SPACE_}]//;
+                    s/^[${_SPACE_}][${_SPACE_}]*//;
+                    s/=.*//;
+                    s/.*[${_SPACE_}]//g;
+                 " \
+                | sort -u
+            )
+        done
+    done 2>/dev/null | tee -a $LOGFILE
+    return 0
+}
+
+function ShowResPaths {
+  #
+  ##  Name: ShowResPaths
+  ##
+  ##  Synopsis: Shows contents of Resource Paths
+  ##
+  ##  Usage: ShowResPaths
+  ##
+  ##  Description:
+  ##    - Extracts Resource Paths from Resource Map
+  ##    - Runs Path on them to extrats contents
+  ##    - Preserves ordering
+  ##    - Appends output to LOGFILE, if applicable
+  #
+    LOGFILE=${LOGFILE:-"/dev/null"}
+    LittleBanner "*** Resource Paths ***" | LogCartRidge
+    for i in $(DeDup $(egrep "^[${_SPACE_}]*[${_ALPHA_}]" $OFA_RESOURCE_MAP | cut -d":" -f1))
+    do
+        LittleBanner $i
+        [[ ! -n $(eval echo \$$i) ]] && echo "(void)" || Path $i | LogStdInRaw
+    done 2>/dev/null | tee -a $LOGFILE
+    return 0
+}
+
+function ShowKeyVarsFromLoader {
+  #
+  ##  Name: ShowKeyVarsFromLoader
+  ##
+  ##  Synopsis: shows current vars from sttings files
+  ##
+  ##  Usage: ShowKeyVarsFromLoader
+  ##
+  ##  Description:
+  ##    - Runs CheckVar on all Key Variable made by the loader
+  ##    .  - OFA_TAG              # Tag made from $1
+  ##    .  - OFA_GRAFT            # Current Graft Product
+  ##    .  - OFA_SCRIPT_AUTO_INIT # Auto Load Flag
+  ##    - Appends output to LOGFILE, if applicable
+  ##
+  ##  Note: 
+  ##      More technical variables from the loader are not shown.
+  #
+    LOGFILE=${LOGFILE:-"/dev/null"}
+    LittleBanner "*** Variables From Loader ***" | LogCartRidge
+    LogShowVar          \
+        OFA_TAG          \
+        OFA_GRAFT         \
+        OFA_WHOSTALKING    \
+        OFA_WHICHSCRIPT     \
+        OFA_SCRIPT_AUTO_INIT \
+    ;
+    return 0
+}
+
+function SecsSinceMidnight {
+    date "+%H %M %S" \
+    | awk '
+        {
+            hh = $1;
+            mm = $2;
+            ss = $3;
+            secs = hh * 3600 + mm * 60 + ss;
+            printf "%d\n", secs;
+        }
+    '
+}
+
+function GetAllchildPids {
+  #
+  ## Name: GetAllchildPids
+  ##
+  ## In:  PID 
+  ## Out: List of child pids
+  ## Ret: 0
+  ##
+  ## Synopsis: echoes space-separated list of all child processes
+  ##
+  ## Usage: GetAllchildPids $$
+  ##
+  ## Description:
+  ## ============
+  ##  - Recurses until no further childs are found
+  ##  - Bails out after 3 seconds to prevent runaway recursion.
+  ##    (sends in its initial start time at each recursion)
+  #
+    typeset PID=${1:-"$$"}
+    typeset CHILES="$PID"
+  #
+  # put time limit on recursion
+  #
+    typeset STARTED=${2:-$(SecsSinceMidnight)}
+    typeset TIMECTL=$(SecsSinceMidnight)
+    [[ $TIMECTL -lt $STARTED ]] && TIMECTL=$(expr 86400 + $TIMECTL) # crossed midnight
+    [[ $(expr $TIMECTL - $STARTED) -gt 10 ]] && BailOut "GetAllchildPids takes over 10 secs -- maybe runaway"
+    MY_SHELL="$(ps -fp$$|tail -1|awk '{print $NF}')"
+    CHILES="$CHILES $(
+        for i in $(ps -fu $USER | egrep "^[^ ][^ ]*  *[^ ][^ ]*  *$PID " | grep -v "\\$MY_SHELL" | awk '{print $2}')
+        do
+            ps -fp $i | LogStdIn
+            [[ "$CHILES" != *"$i"* ]] && GetAllchildPids $i $STARTED
+        done
+    )"
+    printf " %s " "$CHILES"
+}
+
+function CheckConcurrentTask {
+  #
+  ## Name: CheckConcurrentTask
+  ##
+  ## In:  process table, $OFA_CONCURR_EXCL, arg1
+  ## Out: void | message to console
+  ## Ret: 0 on success, 1 otherwise
+  ##
+  ## Synopsis: Scans process table for concurrent scripts
+  ##
+  ## Usage: CheckConcurrentTask [<additional-filter>]
+  ##
+  ## Description:
+  ## ------------
+  ##    Scans for processes matching "$OFA_CONCURR_EXCL" (egrep-style).
+  ##    OFA_CONCURR_EXCL defaults to an unlikely pattern.
+  ##    It is intended to be set to something relevant in a parameter file used
+  ##    by the invoking script.
+  ##    The additional filter, if supplied, restricts further this pattern.
+  ##
+  ##    Example:
+  ##    ========
+  ##     - In rman_hot_bkp.defaults:
+  ##    OFA_CONCURR_EXCL="rman_hot_bkp|rman_arch_bkp|rman_cold_bkp"
+  ##     - From rman_hot_bkp.sh, pass $ORACLE_SID for an additional filter:
+  ##    CheckConcurrentTask "$ORACLE_SID" && BailOut "Concurrency - cannot run"
+  ##
+  ##    If a concurrent process is found, returns 0 (true), else 1
+  ##
+  ## Important Note
+  ## ---------
+  ## This function CANNOT DETECT concurrent process that share a common PPID
+  ## Therefore, to test a case from a terminal connection, programs must be
+  ## started from seperate terminals (backgrounding with "nohup" is not enough). 
+  #
+ # set -xv
+    typeset RV=1;
+    typeset ADD_FILTER=${1:-"."};
+    typeset FIRST_CONCURRENT_PROCESS="";
+    typeset PSHEAD="PPID";
+    typeset MYPID=$$
+    typeset LOOP_CNT=0
+    typeset PRN_PID_LIST=""
+    typeset CHL_PID_LIST=""
+    typeset IGN_PID_LIST=""
+    LogIt "Checking Concurrent Task";
+    LogIt " - candidates are: \"$OFA_CONCURR_EXCL\"";
+    LogIt " - Additional restriction: \"$ADD_FILTER\"";
+    LogIt " - Ignore: \"$OFA_CONCURR_IGN\"";
+  #
+  # Capture own process and time stamp
+  #
+    typeset OWN_PROC="$(ps -fp $$)"
+    OWN_STIME="$(echo $OWN_PROC | awk '{print $5}')"
+    LogIt "Own Process: \"$OWN_PROC\"";
+    LogIt "Getting Ppid stack:";
+  #
+  # Capture all Parent PIDS up to root and add them to PRN_PID_LIST (a space separated list)
+  #
+    LogIt " - parent stack"
+    typeset PPARN=$MYPID;
+    typeset PPARN_PRV="limb0"; # just needs to be different from $PPARN, but best not void
+    PRN_PID_LIST="$PPARN"
+  #
+  # recurse process stack up to root
+  #
+    while [[ $PPARN != "1" ]]; do
+        let LOOP_CNT+=1
+        PPARN="$(ps -fp $PPARN | egrep -v "$PSHEAD" | awk '{print $3}')";
+      #
+      # Break on any of the following conditions. 
+      #  - $PPARN is not 1          (root)
+      #  - $PPARN is not $PPARN_PRV (virtual root)
+      #  - $PPARN is not void       (unexpected)
+      #  - $PRN_PID_LIST is not longer than 100 characters (runaway)
+      #
+        [[ "$PPARN" = "1"          ]] && LogIt "Reached root process ($PPARN)" && break
+        [[ "$PPARN" = "$PPARN_PRV" ]] && LogIt "Reached virtual root process ($PPARN)" && break
+        [[ ! -n "$PPARN"           ]] && LogWarning "Parent Process Empty - this is not normal" && break
+        [[ ${#PRN_PID_LIST} -ge 99 ]] && LogIt "PPID stack gets too long - better give up" && break
+        [[ $LOOP_CNT -gt 20        ]] && LogIt "PPID stack deeper than 20 - this can't be" && break
+        PRN_PID_LIST="$PRN_PID_LIST $PPARN";
+        ps -fp $PPARN | LogStdIn
+        PPARN_PRV="$PPARN"
+    done;
+    LogIt "Ignoring Parent Processes up to root: \" $PRN_PID_LIST \"";
+  #
+  # Get all child processes of own
+  #
+    LogIt " - child processes"
+    CHL_PID_LIST="$(GetAllchildPids $MYPID $(SecsSinceMidnight))"
+    LogIt "Ignoring Child Processes : \" $CHL_PID_LIST \"";
+    IGN_PID_LIST="$(echo $PRN_PID_LIST $CHL_PID_LIST| sed 's@  *@ | @g;s@^ *|@@;s@| *$@@;s@^  *@@;s@  *$@@')";
+    LogIt "Ignore expr: \" $IGN_PID_LIST \""
+  #
+  # Capture all candidate concurrent tasks
+  #  - as per pattern "$OFA_CONCURR_EXCL"
+  #  - minus "$OFA_CONCURR_IGN"
+  #  - minus all processes that match a PID from the "$CHL_PID_LIST"
+  #  - minus processes that have an identical time stamp
+  #
+    CheckVar OFA_CONCURR_EXCL OFA_CONCURR_IGN ADD_FILTER 
+    FIRST_CONCURRENT_PROCESS=$(
+        ps -ef  \
+        | sort -n -k5        \
+        | egrep -v " $$ "     \
+        | egrep -v "$PSHEAD"  \
+        | egrep -v " $IGN_PID_LIST "  \
+        | egrep -v "$OFA_CONCURR_IGN"  \
+        | egrep "$OFA_CONCURR_EXCL"  \
+        | egrep -w "$ADD_FILTER"  \
+        | head -1
+    );
+  #
+  # Check again, in case it was a ghost that passed under the radar:
+  #
+    if [[ -n "$FIRST_CONCURRENT_PROCESS" ]]
+    then
+        sleep 1 # wait a second
+        FIRST_PROCESS_SIGNATURE="$(echo $FIRST_CONCURRENT_PROCESS| sed 's@\([^ ][^ ]*  *[^ ][^ ]*  *[^ ][^ ]*\).*@\1@')"
+        FIRST_CONCURRENT_PROCESS="$(ps -fu $USER |  awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9}' | egrep "$FIRST_PROCESS_SIGNATURE" | egrep -v " $$ " | egrep -v "$OFA_CONCURR_IGN")"
+    fi
+  #
+  # If $FIRST_CONCURRENT_PROCESS" is still there, it is assumed to be a concurrent task.
+  #
+    if [[ -n "$FIRST_CONCURRENT_PROCESS" ]]; then
+        RV=0;
+        LogWarning "Concurrent process(es) detected";
+        LogInfo "First concurrent Process";
+        LogWarning "$FIRST_CONCURRENT_PROCESS";
+        LogInfo "All Concurrent Processes";
+        ps -ef | egrep -v " $CHL_PID_LIST " | egrep -v "$OFA_CONCURR_IGN" | egrep "$OFA_CONCURR_EXCL" | egrep "$ADD_FILTER" | LogStdIn;
+    fi;
+    return $RV
+}
+
+function EchoEval {
+  #
+  ## Name: EchoEval
+  ##
+  ## In:  String
+  ## Out: String
+  ## Ret: 0
+  ##
+  ## Synopsis: makes a string fit for display with eval
+  ##
+  ## Usage: EchoEval "<string>"
+  ##
+  ## Description:
+  ##
+  ##    Intended  to show a "raw" string "such as seen by eval"
+  ##    Simply combining "eval" and "echo" isn't sufficient for strings with pipes, ors and ands:
+  ##    The shell will stumble upon all tokens that drive process control. 
+  ##    Another problem is tha echo "consumes" quotes and escape characters. 
+  ##    This function does its best to get the shell to just interpret variables, so that its
+  ##    output is as close as possible to the cut-and-paste version of the eval command. 
+  ##    However, it sometimes still presents artefacts and at the time of this writing, 
+  ##    it cannot reproduce backspaces.
+  ## 
+  ## ========
+  ## CAUTION: This function might not produce the exact equivalent of what "eval" would make of the input.
+  ## ========
+  ## 
+  ## Workings:
+  ##
+  ##    Escapes input, then applies "echo eval" to it.
+  #
+
+    typeset STR="$@"
+    typeset SHO="$(
+        echo "$STR" \
+            | sed '
+            s@\(["\;|&\\]\)@\\\1@g
+            s@(@\\(@g
+            s@)@\\)@g
+            s@^\`@@
+            ' \
+            | sed "
+            s@\'@\\\'@g" \
+            | sed "s/'$//
+            "
+        )"
+    IsVerbose && LogIt "EchoEval: Orig: \"$SHO\""
+    IsVerbose && LogIt "EchoEval: eval: \"$SHO\""
+    eval echo "$SHO"
+}
+
+function CycleFile {
+  #
+  ## Name: CycleFile
+  ##
+  ## In:  file name
+  ## Out: renamed file, empty original file
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Renames or deletes files depending on Unit/Action
+  ##
+  ## Usage: CycleFile <file> [<Unit/Action>]
+  ##
+  ## Description:
+  ## ============
+  ## Depending on Action:
+  ##    - For renaming actions, renames file by appending requested Unit
+  ##    - For renaming actions, initialized original file with zero-length
+  ##    - For delete action, just deletes the file
+  ##    - Default action is "List" - which i.e. "no action"
+  ##    - Special file name "Can" is used to test support for <action>
+  ##    . - Can <action> returns 0 if supported, 1 otherwise.
+  ##    . - To process a file named "Can", pass it in qualified (with path)
+  ##    - only files owned by current user are processed.
+  ## Note:
+  ##    "ctime" is checked upon to inhibit overwriting of previously renamed files (loss of history),
+  ##    as might happen when renaming is repeatedly requested before expiry of the extension.
+  ##    Overwrite delays vary depending on Unit used.
+  ##    FORCE=Y overrides this protection.
+  ##
+  ## See also: CycleFileS 
+  #
+    typeset FILE_N="$1"
+    typeset UNIT=${2:-List}
+    typeset ACTN
+    typeset EXT
+    typeset Can=0
+    if [[ ! -n "$FILE_N" ]]
+    then
+        OfaHelp CycleFile && return 1
+    elif [[ "$FILE_N" = "Can" ]]
+    then
+        Can=1
+    else
+        [[ ! -f $FILE_N ]] && LogWarning "can't see file \"$FILE_N\"" && return 0
+        [[ ! -w $FILE_N ]] && LogWarning "can't write file \"$FILE_N\"" && return 0
+        [[ ! -w $(dirname $FILE_N) ]] && LogError "can't write directory \"$(dirname $FILE_N)\"" && return 28
+    fi
+
+    ## Units/Actions:
+    case $UNIT in
+        ##  - List          # lists the file (default)
+        List)        
+                     test $Can -eq 1 && return 0;
+                     ACTION="list";
+                 ;;
+        ##  - WeekDayName   # name of week day 
+        WeekDayName) 
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%a);
+                     ACTION="rename";
+                     OVWRT_DELAY=2;
+                 ;;
+        ## - WeekDayNum     # 1 through 7 (1 is Monday)
+        WeekDayNum)  
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%w);
+                     ACTION="rename";
+                     OVWRT_DELAY=2;
+                 ;;
+        ## - WeekNum        # 1 through 52, weeks of year
+        WeekNum)     
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%W);
+                     ACTION="rename";
+                     OVWRT_DELAY=8
+                 ;;
+        ## - MonthName      # abbreviated month name
+        MonthName)   
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%b);
+                     ACTION="rename";
+                     OVWRT_DELAY=32;
+                 ;;
+        ## - MonthNum       # 1 through 12
+        MonthNum)    
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%m);
+                     ACTION="rename";
+                     OVWRT_DELAY=32;
+                 ;;
+        ## - MonthDay       # 1 through 31
+        MonthDay)    
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%d);
+                     ACTION="rename";
+                     OVWRT_DELAY=2;
+                 ;;
+        ## - YyMmDdHhMmSs         # reverse day date format
+        YyMmDdHhMmSs)
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%Y%m%d_%H%M%S);
+                     ACTION="rename";
+                     OVWRT_DELAY=2;
+                 ;;
+        ## - YyMmDd         # reverse day date format
+        YyMmDd)      
+                     test $Can -eq 1 && return 0;
+                     EXT=$(date +%y%m%d);
+                     ACTION="rename";
+                     OVWRT_DELAY=2;
+                 ;;
+        ## - Remove         # remove file
+        Remove)      
+                     test $Can -eq 1 && return 0;
+                     EXT=""
+                     ACTION="remove" 
+                 ;;
+        ## - Clobber        # truncate/set file to null length
+        Clobber)     
+                     test $Can -eq 1 && return 0;
+                     EXT=""
+                     ACTION="clobber"
+                 ;;
+        ## - Not supported # show help
+        *)           
+                     test $Can -eq 1 && return 1;
+                     OfaHelp CycleFile;
+                     LogError "incorrect unit: \"$UNIT\""
+                     return 1
+                 ;;
+    esac
+    if [[ "$ACTION" = "list" ]]
+    then
+      #
+      # list (default) / already done: no action
+      #
+        test 1
+    elif [[ "$ACTION" = "rename" ]]
+    then
+      #
+      # rename and truncate
+      #
+        if [[ -n "$(find $(dirname $FILE_N.$EXT) -name $(basename $FILE_N.$EXT) -ctime -$OVWRT_DELAY)" ]] \
+        && [[ "$FORCE" != "[Yy1]" ]]
+        then
+            LogWarning "$(ls -ld $FILE_N)"
+            LogWarning "newer than $OVWRT_DELAY days - not enough for method \"$UNIT\""
+        else
+            LogNDo "cp $FILE_N $FILE_N.$EXT" 
+            LogNDo "> $FILE_N"
+        fi
+    elif [[ "$ACTION" = "remove" ]]
+    then
+      #
+      # remove
+      #
+         LogNDo "rm -f $FILE_N"
+    elif [[ "$ACTION" = "clobber" ]]
+    then
+      #
+      # truncate
+      #
+         LogNDo "echo > $FILE_N"
+    else
+         LogError "CycleFile: programming error: \"$ACTION\" is incorrect"
+         return 88
+    fi
+    return 0
+}
+
+function CycleFileS {
+  #
+  ## Name: CycleFileS
+  ##
+  ## In:  files as per parammeters
+  ## Out: files deleted or renamed
+  ## Ret: 0/1
+  ##
+  ## Synopsis: Run specified action on files as per expression, i.e. purge 
+  ## 
+  ## Usage: CycleFileS  "$PRGE_PATH" "$FILE_ACTN" "$FILE_EXPR" ["$DAYS_BACK"] ["$PATH_SIGT"]
+  ## 
+  ## - PRGE_PATH: input directory path - fund runs from there
+  ## - FILE_ACTN: File Action. See "ofa CycleFile" (without the "S") for supported keywords.
+  ## - FILE_EXPR: Simple pattern for use with "find"
+  ## - DAYS_BACK: defaults to $OFA_PRGE_DAYS_BACK
+  ## - PATH_SIGT: defaults to $OFA_PRGE_PATH_SIGT
+  ## 
+  ## Args work positional, pre-assigned or as overrides (in-line assignments).
+  #
+    typeset DAYS_BACK_CLAUSE=""
+  #
+  # These parameter are _not_ typeset as they are settable in 3 ways:
+  #  - positional
+  #  - pre-assigned
+  #  - override # typeset would compromise ReadOverRideAssignments()
+  # 
+    PRGE_PATH="${1:-"$PRGE_PATH"}"
+    FILE_ACTN="${2:-"$FILE_ACTN"}"
+    FILE_EXPR="${3:-"$FILE_EXPR"}"
+    DAYS_BACK="${4:-"$OFA_PRGE_DAYS_BACK"}"
+    PATH_SIGT="${5:-"$OFA_PRGE_PATH_SIGT"}"
+    ReadOverRideAssignments $@
+
+  # for the record
+  # 
+    CheckVar PRGE_PATH FILE_ACTN FILE_EXPR DAYS_BACK
+
+  ## You may also override:
+  ##  - PATH_SIGT: mandatory pattern to match in purge path ($1)
+    ! CheckVar PATH_SIGT && LogError "empty vars: see warnings" && return 9
+    ! CleanPath PRGE_PATH && LogWarning "nothing valid in PRGE_PATH" && return 0
+
+  # File Action ($2) is checked by calling CycleFile Can <action>
+    ! CycleFile Can $FILE_ACTN && OfaHelp CycleFile && return 9
+
+  ## - DAYS_BACK: positive integer only files older than this. 
+  ## Note: for zero days, set to empty string (0 won't do).
+    [[ -n "$DAYS_BACK" ]] && DAYS_BACK_CLAUSE="-mtime +$DAYS_BACK"
+    [[ -n "$DAYS_BACK_CLAUSE"   ]] && ! IsInteger $DAYS_BACK && LogError "DAYS_BACK (\"$DAYS_BACK\") not an integer" && return 10
+
+  #
+  # iterate over path list
+  #
+    for CUR_PATH in $(Path PRGE_PATH) 
+    do
+      #
+      # check path against signature
+      #
+        RealPath $CUR_PATH | egrep "$PATH_SIGT" >/dev/null
+        if [[ $? -ne 0 ]]
+        then
+            LogWarning "path \"$CUR_PATH\" does not satisfy signature \"$PATH_SIGT\""
+            continue
+        fi
+      #
+      # process a path
+      #
+        LogCons processing path: $CUR_PATH
+        LogCons "find $CUR_PATH -type f -user $USER $DAYS_BACK_CLAUSE -name \"$FILE_EXPR\""
+        LogCons "Action is: CycleFile <file> $FILE_ACTN"
+
+        find $CUR_PATH -type f -user $USER $DAYS_BACK_CLAUSE -name "$FILE_EXPR" \
+        | while read $OFA_READ_TIME_OUT FQFP \
+        ;do
+          #
+          # process a file
+          # Note: file is listed to stdout  for the benefit of the caller (e.g. ofa_step)
+          #
+            ls -l $FQFP
+            CycleFile $FQFP $FILE_ACTN 
+        done 
+    done
+    return 0
+}
+
+
+function CheckReadableDir {
+  #
+  ## Name: CheckReadableDir
+  ##
+  ## In:  directory path or variable name
+  ## Out: n/a
+  ## Ret: 0/1
+  ##
+  ## Synopsis: checks whether directory is readable
+  ##
+  ## Usage: CheckReadableDir <directory path>|<variable name>
+  ##
+  ## Description:
+  ##
+  ##    <All useful explanatory text.>
+  ##
+  #  Workings:
+  #
+  #     <"internal" (not displayed in Usage text)>
+  #
+    typeset _P="$1"
+    [[ ! -n $_P   ]] && LogWarning "CheckReadableDir: need directory path in arg1" && return 52
+    [[ ! -d "$_P" ]] && CheckVarMute "$_P" && _P="$(eval echo \$$_P)"
+    [[ ! -d "$_P" ]] && LogWarning "can't see directory: \"$_P\""     && return 51
+    [[ ! -r "$_P" ]] && LogWarning "can't read directory: \"$_P\""    && return 51
+    [[ ! -x "$_P" ]] && LogWarning "can't execute directory: \"$_P\"" && return 51
+    IsVerbose && LogIt "directory \"$_P\" is readable"    
+    return 0
+}
+
+function LsInOfaRoot {
+  #
+  ## Name: LsInOfaRoot
+  ##
+  ## In:  file or directory path
+  ## Out: listing on stdout
+  ## Ret: 0/1
+  ##
+  ## Synopsis: applies SubPath $OFA_ROOT to output of LsFullPath
+  ##
+  ## Usage: LsInOfaRoot [<file expression>]
+  ##
+  ## Description:
+  ##
+  ##    Useful whe the file path from OFA_ROOT downwards is needed.
+  ##    Typical in ofa maintenance/admin scenarios.
+  ##
+  #  Workings:
+  #
+  #     <"internal" (not displayed in Usage text)>
+  #
+   for i in $(LsFullPath $*)
+   do
+       SubPath $OFA_ROOT $i || LogWarning "$i not under $OFA_ROOT"
+   done
+}
+
+function Args2Egreps {
+  #
+  ## Name: Args2Egreps
+  ##
+  ## In:  command line args
+  ## Out: string to stdout
+  ## Ret: 0
+  ##
+  ## Synopsis: takes all tokens on command line and make them into an incremental egrep filter expression
+  ##
+  ## Usage: Args2Egreps $@
+  ##
+  ## Ex: Args2Egreps "n.x" "DEV|UAT"  # All Unix or Linux, DEV or TEST (incremental restriction)
+  ##
+  ## Description:
+  ## ============
+  ## - strips override assignments (a = b)
+  ## - makes args into incremental filter chain like: "egrep \"arg1\" | egrep \"arg2\" | egrep \"arg3\" .."
+  ## - if no arg, echoes egrep "."
+  ## Caution:
+  ## - cannot handle switches like -v or -i. Simply builds a piped chain.
+  ## 
+  ##
+  #
+    if [[ ! -n "$1" ]]
+    then
+        echo "egrep \".\"" 
+    else
+        echo  "egrep \"$(echo $@|sed 's/[${_SPACE_}][${_SPACE_}]*[^=][^=]*=[${_SPACE_}]*[^${_SPACE_}]*[^${_SPACE_}]*/ /;s/  */\"|egrep \"/g')\"" 
+    fi
+    return 0
+}
+
+function IterInit {
+  #
+  ## Name: IterInit
+  ##
+  ## In:  Variable name, records from file
+  ## Out: iterator
+  ## Ret: 0/1
+  ##
+  ## Synopsis: generate iterator for file
+  ##
+  ## Usage: IterInit <name> <file> [<filter>] 
+  ## 
+  ## - <name> : arbitrary label, to become a variable
+  ## - <file> : records (fields separated by ":"), record format header (optional)
+  ## - <filter> : egrep-style items, each works incrementally (reduce). 
+  ##
+  ## Example:
+  ## IterInit BOB $RORATAB "Save|Secret" "UAT|DEV|TEST"
+  ##
+  ## Description:
+  ## ============
+  ##  Creates set of arrays for use with IterFetch. 
+  ##  This set of arrays is the iterator.
+  ##  
+  ##  Record format:
+  ##  - either found in <file>, like:
+  ##  # record format: label1 : label2 : label3 ...
+  ##  - or supplied as a variable called RECORD_FORMAT, like:
+  ##  label1 label2 label3 ...
+  ##  Labels must be legal variable names. 
+  ##
+  ##  Use:
+  ##  Feed a loop with $<name> and call IterFetch <name> within it. 
+  ##  Access varlues as per record format for each record.
+  ##  Note: 
+  ##   - original lines underlying records are logged but _not_ stored in any variables.
+  ##   - only their line numbers are (via $<name>)
+  ##
+  #
+  #   The Iterator structure is made up of the following variables: 
+  #    - _S_<name>_FILE : file to iterate
+  #    - <name>         : scalar contining line numbers separated by whitespace.
+  #    - _A_<name>_R    : array contining line numbers
+  #    - _S_<name>_K    : scalar containing a field numbers (count from 1 to n, separated by whitespace)
+  #    - _A_<name>_K    : array containing column labels (variable names)
+  #
+  #   1.- first array: Record Format
+  #   ==============================
+  #   This array is named _A_<name>_K, associated index variable _S_<name>_K (internal use)
+  #   Those are labels found on the line "# record format: ..." in <file>.
+  #   They are used as variable names, assigned during iteration (See IterFetch)
+  #   For files that have no such format line, $RECORD_FORMAT can be supplied by the script.
+  #   Supplied RECORD_FORMAT overrides version in <file>, if present (warning logged)
+  #   
+  #   2.- second array: Matched Lines Index
+  #   =====================================
+  #   This array is named _A_<name>_R. It has no associated index index variable.
+  #   The variable _A_<name>_TOTAL is assigned for user information, but is used for 
+  #   control only.
+  #   A "whitespaced" list of line numbers of matched lines is assigned to <name> (arg1)
+  #   for the caller (your script) to loop over the set of records.
+  #   Note: this variable is _not_ used by the iterator (it has an internal array for that)
+  #
+
+    typeset _CNT_R=0
+    typeset _FMT_A=""
+    typeset _DTA_A=""
+    typeset _IDX_S=""
+    typeset _CNT_K=0
+    typeset V=""
+    typeset RECORD_FORMAT_OVR=""
+    typeset _RV=0
+
+    VolDn
+  #
+  # arg 1: name
+  #
+    typeset _INAME=$1
+    [[ ! -n "$_INAME" ]] \
+        && OfaHelp IterInit \
+        && LogError "Missing arg1" \
+        && return 1 \
+        || shift  1 \
+    ;
+
+  #
+  # arg 2 is the file
+  #
+    typeset FILE_TO_PARSE=$1 
+    [[ ! -r "$FILE_TO_PARSE" ]] \
+        && OfaHelp IterInit \
+        && LogError "Can't see file: \"$FILE_TO_PARSE\" (arg2)" \
+        && return 1 \
+        || shift  1 \
+    ;
+
+    LogIt "File to parse: \"$FILE_TO_PARSE\""
+    eval _S_${_INAME}_FILE=$FILE_TO_PARSE
+  #
+  # the remainder is the filter
+  #  
+    FILTER_EXPR="$(Args2Egreps "$@")"
+    CheckVar FILTER_EXPR
+  #
+  # Record format is the line after "# record format"
+  #
+    [[ -n "$RECORD_FORMAT" ]] && RECORD_FORMAT_OVR="$RECORD_FORMAT" 
+    RECORD_FORMAT="$(
+        egrep -i "^ *# record.format:" $FILE_TO_PARSE \
+        | head -1 \
+        | cut -d":" -f2- \
+        | sed 's/:/ /g'
+    )"
+
+    if [[ -n "$RECORD_FORMAT_OVR" ]]
+    then
+        if [[ "$RECORD_FORMAT_OVR" = "$RECORD_FORMAT" ]] 
+        then
+            LogWarning "RECORD_FORMAT defined in both $(ThisScript) and $FILE_TO_PARSE - but they're identical"
+        else 
+            LogWarning "RECORD_FORMAT defined in both $(ThisScript) and $FILE_TO_PARSE - and they DIFFER:" 
+            LogWarning "Using $(ThisScript)'s:  \"$RECORD_FORMAT_OVR\""
+            LogWarning "Discarded $FILE_TO_PARSE's: \"$RECORD_FORMAT\""
+            RECORD_FORMAT="$RECORD_FORMAT_OVR"
+        fi
+    fi
+
+    ! CheckVar RECORD_FORMAT && LogError "No format header in file \"$FILE_TO_PARSE\"" && return 1
+
+    for v in $RECORD_FORMAT
+    do
+        ! IsLegalVarName $v \
+            && LogError "IterInit (RECORD FORMAT): \"$v\": not a legal variable name" \
+            && return 1 \
+        ;
+    done
+
+  #
+  # check that none of the variables exist (avoid clashes)
+  #
+     # t.b.d. ?
+  #
+  # only when all tests are done shall we start
+  # 
+    eval _S_${_INAME}_K=""
+    for i in $RECORD_FORMAT
+    do
+        let _CNT_K+=1
+      #
+      # Append counter to field counter enumeration variable
+      #
+        eval _S_${_INAME}_K=\"\$_S_${_INAME}_K $_CNT_K\"
+      #
+      # assign field name to in "keys" array
+      #
+        eval _A_${_INAME}_K[$_CNT_K]="$i" 
+    done
+    LogIt "Nb. of fields: $(eval echo \${#_A_${_INAME}_K[*]})"
+
+  #
+  # Append line numbers of matched records from FILE_TO_PARSE to $_INAME.
+  # Note: this is the name the user has passed in to drive his loop.
+  #
+    for i in $(
+        egrep -n "." $FILE_TO_PARSE | egrep -v "[$_DIGIT_][$_DIGIT_]*: *#" |  eval $FILTER_EXPR | cut -d":" -f1
+    );do
+        let _CNT_R+=1
+        eval $_INAME=\"\$$_INAME $i\"
+        eval _A_${_INAME}_R[$_CNT_R]="$i"
+        printf "[%3d] %s\n" $_CNT_R "$(sed -n "${i}p" $FILE_TO_PARSE)" | LogStdInRaw
+    done 
+    eval _S_${_INAME}_TOTAL=\${#_A_${_INAME}_R[*]}
+    LogIt "Records matched: $(eval echo \$_S_${_INAME}_TOTAL)"
+    eval _S_${_INAME}_C=1
+    [[ ! -n "$(eval echo \$${_INAME})" ]] && _RV=1
+    VolPrv
+    return $_RV
+}
+
+function IterList {
+    typeset _INAME=$1
+    ! IterCk $_INAME && return 1
+    typeset _LIM=$(eval echo \$_S_${_INAME}_TOTAL)
+    typeset _CNT=0
+    while [[ $_CNT -lt $_LIM ]]
+    do
+        let _CNT+=1
+        printf "[%3d] %s\n" $_CNT "$(eval sed -n \"\${_A_${_INAME}_R[$_CNT]}p\" \$_S_${_INAME}_FILE)" | LogStdInRaw
+    done
+}
+
+function IterNext {
+    typeset _INAME=$1
+    ! IterCk $_INAME && return 1
+    eval let _S_${_INAME}_C+=1
+}
+
+function IterFetch {
+  #
+  ## Name: IterFetch
+  ##
+  ## In:  Iterator + associated file
+  ## Out: variable assigments
+  ## Ret: 0/1
+  ##
+  ## Synopsis: fetch current record from iterator and assign variables
+  ##
+  ## Usage: IterFetch <name>  
+  ## 
+  ## Full Example: 
+  ## =============
+  ## IterInit BOB $RORATAB "Save|Secret" 
+  ## for i in $BOB; do 
+  ##    # display SID, ENV and ZONE from $RORATAB 
+  ##    echo $SID: is a $ENV db in $ZONE  
+  ## done
+  ##
+  ## Description:
+  ##
+  ##  - Fetches current record from <file> via iterator <name>.
+  ##    Do IterNext <name> to advance to the next record.
+  ##  - Assigns values according to mapping per RECORD_FORMAT (See IterInit)
+  ##  - The record itself is not stored in any variable, only logged, but
+  ##  $<name> contains line numbers of matched records in <file>, if needed.
+  ##
+  #
+    VolDn
+    typeset _INAME=$1
+    typeset i
+    typeset REC
+    
+    ! IterCk $_INAME && return 1
+
+
+    REC="$(eval sed -n \"\${_A_${_INAME}_R[\$_S_${_INAME}_C]}p\" \$_S_${_INAME}_FILE)"
+    LogIt "Record $(eval echo \$_S_${_INAME}_C): $REC"
+    for i in $(eval echo \$_S_${_INAME}_K)
+    do
+        eval $(eval echo \${_A_${_INAME}_K[$i]}=\\"$(echo $REC | cut -d":" -f$i | sed 's/^ *//;s/ *$//')\\")
+        eval $_INAME="$REC" # make whole record available in user's loop
+    done
+    VolPrv
+    return 0
+}
+
+function IterJump {
+  #
+  # check args
+  #
+    [[ $# -ne 2 ]] \
+        && OfaHelp IterJump \
+        && return 1 \
+    ;
+    typeset _INAME="$1"
+    typeset _2STEP="$2"
+    eval _S_${_INAME}_C=$_2STEP
+    IterCk $_INAME || return 1
+
+    return 0
+}
+
+function IterCk {
+  #
+  # check arg
+  #
+    typeset _INAME="$1"
+    [[ ! -n "$_INAME" ]] \
+        && LogError "IterCk: need name" \
+        && return 1 \
+    ;
+  #
+  # check counter (existent)
+  #
+    ! IsInteger "$(eval echo \$_S_${_INAME}_C)" \
+        && LogError "IterCk: not initialized  \"$_INAME\""  \
+        && return 1 \
+    ;
+  #
+  # Counter lower than 1
+  #
+    [[ $(eval expr \$_S_${_INAME}_C) -lt 1 ]] \
+        && LogWarning "Out of bounds: \"$(eval echo \$_S_${_INAME}_C)\"" \
+        && return 1 \
+    ;
+  #
+  # Counter exceeds limit
+  #
+    [[ $(eval expr \$_S_${_INAME}_TOTAL - \$_S_${_INAME}_C) -lt 0 ]]  \
+        && LogIt "$(eval echo \$_S_${_INAME}_C: iterator \$_INAME stops at \$_S_${_INAME}_TOTAL)"  \
+        && return 1 \
+    ;
+    return 0
+}
+
+function IterBack {
+    typeset _INAME=$1
+    typeset _STEPS=${2:-"1"}
+    ! IterCk $_INAME && OfaHelp IterBack && return 1
+    if  [[ $(eval echo \$_S_${_INAME}_C) -le $_STEPS ]]
+    then
+        LogWarning "IterBack \"$_STEPS\" must be smaller than current step ($(eval echo \$_S_${_INAME}_C))"
+        return 1
+    elif  [[ $_STEPS -lt 1 ]]
+    then
+        LogWarning "IterBack \"$_STEPS\" must greater than 0"
+        return 0
+    else
+        eval _S_${_INAME}_C=$(eval expr \$_S_${_INAME}_C - $_STEPS)
+    fi
+    return 0
+}
+
+function RemoveFile {
+    #
+    ## Name: RemoveFile
+    ##
+    ## In:  file to remove
+    ## Out: string to stdout
+    ## Ret: 0
+    ##
+    ## Synopsis: remove a file from disk.
+    ##
+    ## Usage: RemoveFile $@
+    ##
+    ## Ex: RemoveFile /tmp/fake.txt
+    ## All Unix or Linux, DEV or TEST (incremental restriction)
+    ##
+    ## Description:
+    ## ============
+    ## - test if the file exist. If yes it remove it if no it exit.
+    ##
+    ##
+    typeset FileToRemove="$1"
+    ! CheckVar FileToRemove && LogError "empty vars: see warnings" && return 9
+
+    if [[ -f $FileToRemove ]]; then
+      rm $FileToRemove
+      if [[ $? -ne 0 ]]; then
+        LogError "Error Remove file: $FileToRemove"
+      else
+        LogIt "File $FileToRemove removed."
+      fi
+    else
+      LogWarning "Given file : $FileToRemove. does not exist. SKIP."
+    fi
+
+}
+
+function RemoveDirectory {
+    #
+    ## Name: RemoveDirectory
+    ##
+    ## In:  directory to remove
+    ## Out: string to stdout
+    ## Ret: 0
+    ##
+    ## Synopsis: remove a file from disk.
+    ##
+    ## Usage: RemoveDirectory $@
+    ##
+    ## Ex: RemoveDirectory /tmp/fake.txt  # All Unix or Linux, DEV or TEST (incremental restriction)
+    ##
+    ## Description:
+    ## ============
+    ## - test if the directory exist. If yes it remove it if no it exit.
+    ## - test if the realpath can be resolved to avoid relative path
+    ##
+    ##
+    typeset DirToRemove="$1"
+    ! CheckVar DirToRemove && LogError "empty vars: see warnings" && return 9
+    dir=$(realpath "$DirToRemove" 2> /dev/null)
+    if [ $? -ne 0 ]; then
+      LogError "Failed to resolve the given directory realpath ($DirToRemove)"
+      return 1
+    fi
+    if [ ! -d "$DirToRemove" ]; then
+      LogError "Given directory ($DirToRemove) does not exist or is not a directory."
+      return 1
+    fi
+    rm -r -- "$DirToRemove"
+    if [ $? -eq 0 ]; then
+      LogIt "Directory $DirToRemove and all it content was removed."
+    else
+       LogError "Failed to remove given  directory ($DirToRemove)."
+       return 1
+    fi
+}
+
+OFA_STD_FUNCTIONS_LOADED=1

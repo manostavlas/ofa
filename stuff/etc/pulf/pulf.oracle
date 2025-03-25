@@ -1,0 +1,15 @@
+  #
+  # pulf parameters for oracle
+  #
+    FILE_N_PAT="oratab"
+    FILE_D_LIST="/etc /var/opt/oracle"
+
+    function aggfunc {
+       for f in $(find $PUT_DIR -type f -name oratab)
+       do
+           mv $f $f.$(basename $(dirname $f))
+       done
+       return 0
+    }
+
+    return 0
